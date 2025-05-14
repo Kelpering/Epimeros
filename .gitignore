@@ -1,0 +1,16 @@
+# Do not track any hidden files
+.*
+
+# Except .gitignore
+!.gitignore
+
+# Do not track any build folders
+build/
+cmake/
+
+# Do not track any output files
+*.o
+*.bin
+*.exe
+*.out*
+*log*
