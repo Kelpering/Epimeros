@@ -24,10 +24,10 @@ typedef struct
     symbol_type type;
 } symbol;
 
-// A list of symbols. Each symbol must be unique.
+// A list of symbols. Each symbol name must be unique.
 extern symbol symtbl[SYMTBL_SIZE];
 
 // Fill static symtbl with symbols.
-void fill_symtbl(FILE* file);
+int fill_symtbl(FILE* file);
 
 #endif // __SYMTBL_H__

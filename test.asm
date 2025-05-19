@@ -5,7 +5,7 @@ main:
     beq  x1, x2, yes      # x1 == x2
 
 #   x1 != x2
-n~o:
+no:
     addi ra, x0, 0
     jal x0, loop
 
