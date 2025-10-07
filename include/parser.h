@@ -1,27 +1,23 @@
-#ifndef __PARSER_H__
-#define __PARSER_H__
-
+#ifndef __EPIMEROS_PARSER_H__
+#define __EPIMEROS_PARSER_H__
+#include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 
-#define TOTAL_MNEMONICS (sizeof(instr_defs) / sizeof(instr_defs[0]))
-#define TOTAL_REGS (sizeof(reg_str_arr) / sizeof(reg_str_arr[0]))
-
-//- This will be used to parse the assembler syntax.
-
-// Enum for all valid instruction types
+// All instruction types
 typedef enum
 {
-    R_TYPE,     // rd, rs1, rs2
-    I_TYPE,     // rd, rs1, imm
-    S_TYPE,     // rs1, rs2, imm
-    B_TYPE,     // rs1, rs2, imm
-    U_TYPE,     // rd, imm
-    J_TYPE,     // rd, imm
-    NO_TYPE     // No type assigned
+    // Pattern defines operand_t expected types/values
+    R_TYPE,             // rd, rs1, rs2
+    I_TYPE,             // rd, rs1, imm
+    S_TYPE,             // rs1, rs2, imm
+    B_TYPE,             // rs1, rs2, imm
+    U_TYPE,             // rd, imm
+    J_TYPE,             // rd, imm
+    NO_TYPE,            // Depends on mnemonic
+    ERROR_TYPE = -1     // Defines an error in parsing
 } instr_type;
 
-// Enum for all valid instructions/mnemonics
+// An enum to index into instr_defs
 typedef enum
 {
     LUI,
@@ -61,16 +57,18 @@ typedef enum
     SRA,
     OR,
     AND,
+    FENCE,
     ECALL,
-    EBREAK
+    EBREAK,
+    ERROR_MNEMONIC = -1
 } mnemonic_index;
 
 // A definition of all valid instructions, mapped to mnemonic_index.
 static const struct
 {
-    const char* str;
-    const uint32_t opcode;
-    const instr_type type;
+    const char* str;        // Mnemonic string
+    const uint32_t opcode;  // Partial opcode for valid instruction
+    const instr_type type;  // Associated instruction type
 } instr_defs[] = 
 {
     [LUI]    = {"lui",     0b00000000000000000000000000110111, U_TYPE},
@@ -110,6 +108,7 @@ static const struct
     [SRA]    = {"sra",     0b01000000000000000101000000110011, R_TYPE},
     [OR]     = {"or",      0b00000000000000000110000000110011, R_TYPE},
     [AND]    = {"and",     0b00000000000000000111000000110011, R_TYPE},
+    [FENCE]  = {"fence",   0b0000'0000'0000'00000000000000001111, NO_TYPE},
     [ECALL]  = {"ecall",   0b00000000000000000000000001110011, NO_TYPE},
     [EBREAK] = {"ebreak",  0b00000000000100000000000001110011, NO_TYPE},
 };
@@ -117,9 +116,9 @@ static const struct
 // A definition of all valid registers.
 static const struct
 {
-    const char* str;
-    const uint32_t reg_index;
-} reg_str_arr[] = 
+    const char* str;            // Register String
+    const uint32_t reg_index;   // Register Opcode
+} reg_defs[] = 
 {
     // Standard
     {"x0",    0},
@@ -190,29 +189,27 @@ static const struct
     {"t6",  31},
 };
 
-// Enum for types of operand recognized
-typedef enum
+typedef enum op_type
 {
-    REGISTER,
-    IMMEDIATE,
-    SYMBOL,
+    REGISTER,   // Operand value is a reg_index from reg_defs
+    IMMEDIATE,  // Operand value is a verbatim immediate value
+    SPECIAL,    // Operand value is defined by mnemonic
 } op_type;
 
-// A valid operand.
-typedef struct
+typedef struct operand_t
 {
-    op_type type;
-    uint32_t val;
-} op_t;
+    op_type type;   // Type of operand
+    int64_t val;    // Value associated with operand
+} operand_t;
 
-
-typedef struct
+typedef struct instr_t
 {
-    mnemonic_index mnemonic;
-    instr_type type;
-    op_t op[3];
+    mnemonic_index mnemonic;    // Index into instr_defs
+    instr_type type;            // Instruction type / error return.
+    operand_t op[3];            // 3 operands, can be NULL if type allows
 } instr_t;
 
-instr_t* parse_file(FILE* file, int instr_cnt);
 
-#endif // __PARSER_H__
+instr_t parse_instruction(const char* str);
+
+#endif // __EPIMEROS_PARSER_H__

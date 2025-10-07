@@ -1,229 +1,530 @@
 #include "parser.h"
+#include "error.h"
 #include <stdlib.h>
 #include <string.h>
-#include "defines.h"
-#include "symtbl.h"
 
-static int line_num = 1;
+// Parse a single (null-terminated) string
+// Termination chars: '\0', '\n', ';'
 
-static void normalize_line(char* line)
+bool valid_char(char c)
 {
+    // Numeric
+    if ('0' <= c && c <= '9')
+        return true;
 
-    int line_size = 0;
-    while (line[line_size++] && line_size < MAX_LINE_SIZE);
+    // Alphabetic
+    if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z'))
+        return true;
 
-    if (line_size >= MAX_LINE_SIZE)
+    // Special
+    if (c == ',' || c == '-' || c == '_' || c == '.' || c == ';')
+        return true;
+    
+    // Whitespace (no newline)
+    if (c == ' ' || c == '\0')
+        return true;
+
+    // Unknown char, invalid.
+    return false;
+}
+
+char* normalize_line(const char* str)
+{
+    int str_size = 0;
+    while (str[str_size])
     {
-        printf("Error: Max line size exceeded. (Line: %d)\n", line_num);
-        exit(1);
-    }
-
-    // Add newline if absent
-    if (line[line_size-2] != '\n')
-    {
-        printf("Warn: Newline Absent (Line: %d)", line_num);
-        line[line_size-2] = '\n';
-    }
-
-    for (int i = 0; i < MAX_LINE_SIZE; i++)
-    {
-        if (line[i] == '\0')
-            break;
-
-        // Decapitalize
-        if (line[i] >= 'A' && line[i] <= 'Z')
+        if (str[str_size] == ';')
         {
-            line[i] += 32;
+            str_size++;
+            break;
+        }
+        else if (!valid_char(str[str_size]))
+        {
+            throw_error("Invalid Char");
+        }
+
+        str_size++;
+    }
+
+    int norm_index = 0;
+    char* norm_str = malloc(str_size);
+
+    // const char* str constraints:
+        // Must be null-terminated
+        // Must contain a mnemonic (at least one non-whitespace character)
+            // Mnemonic can be invalid
+
+
+    int i = 0;
+
+    // Skip whitespace before mnemonic
+    while(str[i] == ' ')
+        i++;
+
+    // Result: norm_str = "Mnemonic "
+    while(str[i] != ' ' && str[i] != '\n' && str[i] != '\0' && str[i] != ';')
+        norm_str[norm_index++] = str[i++];
+    norm_str[norm_index++] = ' ';
+
+    if (str[i] == ';')
+    {
+        norm_str[norm_index++] = '\0';
+        return norm_str;
+    }
+
+    // Now save to comma, remove all whitespace
+    // Until we reach \n or \0
+    //? Form: mnemonic op1,op2,op3
+    //! Test for split tokens "op 1," vs "op1,"
+
+    enum 
+    {
+        not_parsed,
+        parsing,
+        parsed
+    } token_parsed = not_parsed;
+    while (str[i] != '\n' && str[i] != '\0')
+    {
+        // Remove comments
+        if (str[i] == ';')
+        {
+            norm_str[norm_index++] = '\0';
+            break;
+        }
+
+        // Reset token when encountering ','
+        if (str[i] == ',')
+        {
+            token_parsed = not_parsed;
+            norm_str[norm_index++] = str[i++];
+            continue;
+        }
+        // Skip whitespace
+        else if (str[i] == ' ')
+        {
+            if (token_parsed == parsing)
+                token_parsed = parsed;
+            i++;
             continue;
         }
 
-        // Remove line comments
-        if (line[i] == '#')
+        // Prevent split tokens "op 1," vs "op1,"
+        if (token_parsed == parsed)
         {
-            // Line i+1 will not overflow due to previous check.
-            line[i] = '\n';
-            line[i+1] = '\0';
-            break;
+            throw_error("Split token");
         }
+
+        token_parsed = parsing;
+        norm_str[norm_index++] = str[i++];
+    }
+    norm_str[norm_index] = '\0';
+
+    // Decapitalize
+    for (int i = 0; norm_str[i]; i++)
+    {
+        if ('A' <= norm_str[i] && norm_str[i] <= 'Z')
+            norm_str[i] += 32;
+    }
+
+    return norm_str;
+}
+
+mnemonic_index parse_mnemonic(const char* norm_str, int* str_index)
+{
+    int token_size = 0;
+    while (norm_str[token_size++] != ' ');
+
+    char* mnemonic = malloc(token_size);
+    for (int i = 0; i < token_size-1; i++)
+        mnemonic[i] = norm_str[i];
+    mnemonic[token_size-1] = '\0';
+
+    mnemonic_index parsed_mnemonic = -1;
+    for (int i = 0; i < sizeof(instr_defs)/sizeof(instr_defs[i]); i++)
+    {   
+        if (strcmp(mnemonic, instr_defs[i].str) == 0)
+            parsed_mnemonic = i;
+    }
+    *str_index += token_size;
+    free(mnemonic);
+
+
+    return parsed_mnemonic;
+}
+
+int parse_reg(const char* norm_str, int* str_index)
+{
+    if (norm_str[*str_index] == ',')
+        throw_error("Empty Operand");
+    
+    int tok_index = *str_index;
+    while (norm_str[tok_index] != ',' && norm_str[tok_index] != '\0')
+        tok_index++;
+    tok_index++;
+
+    int tok_size = tok_index - *str_index;
+    char* token = malloc(tok_size);
+
+    for (int i = 0; i < tok_size; i++)
+        token[i] = norm_str[*str_index+i];
+    token[tok_size-1] = '\0';
+    *str_index += tok_size;
+
+    int reg = -1;
+    for (int i = 0; i < sizeof(reg_defs)/sizeof(reg_defs[i]); i++)
+    {   
+        if (strcmp(token, reg_defs[i].str) == 0)
+            reg = i;
+    }
+    free(token);
+
+    if (reg == -1)
+        throw_error("Unknown register");
+
+    return reg;
+}
+
+const char* extract_token(const char* norm_str, int* str_index)
+{
+    // We can probably use this in all of the other 
+    // parse functions, in revision two.
+
+    if (norm_str[*str_index] == ',' || norm_str[*str_index] == '\0')
+        throw_error("Empty Operand");
+
+    int tok_index = *str_index;
+    while (norm_str[tok_index] != ',' && norm_str[tok_index] != '\0')
+        tok_index++;
+
+    int tok_size = tok_index - *str_index + 1;
+    char* token = malloc(tok_size);
+
+    for (int i = 0; i < tok_size; i++)
+        token[i] = norm_str[*str_index+i];
+    token[tok_size-1] = '\0';
+    *str_index += tok_size;
+
+    return token;
+}
+
+int parse_int(const char* num)
+{
+    int num_size = 0;
+    int index = 0;
+    while (num[num_size++]);
+    num_size--;
+    
+    int power = 1;
+    int64_t value = 0;
+    bool negative = false;
+
+    if (num[index] == '-')
+    {
+        negative = true;
+        index++;
+    }
+
+    if (num[index] == '0')
+    {
+        index++;
+        switch (num[index++]) 
+        {
+            case 'b':
+                // Check valid characters
+                for (int i = index; num[i]; i++)
+                {
+                    if (num[i] < '0' || num[i] > '1')
+                        throw_error("Unknown Immediate Symbol");
+                }
+                
+                for (int i = num_size - 1; i >= index; i--)
+                {
+                    value += (num[i]-'0') * power;
+                    power *= 2;
+                }
+                
+                return (negative) ? -value : value;
+
+            case 'x':
+                // Check valid characters
+                for (int i = index; num[i]; i++)
+                {
+                    if ((num[i] < '0' || num[i] > '9') &&
+                        (num[i] < 'a' || num[i] > 'f'))
+                    {
+                        throw_error("Unknown Immediate Symbol");
+                    }
+                }
+                
+                for (int i = num_size - 1; i >= index; i--)
+                {
+                    int digit;
+                    if (num[i] >= 'a')
+                        digit = num[i] - 'a' + 10;
+                    else
+                        digit = num[i] - '0';   
+                    value += digit * power;
+                    power *= 16;
+                }
+                
+                return (negative) ? -value : value;
+            default:
+                index -= 2;
+                // Intentional fallthrough to default integer processing.
+        }
+    }
+    
+    // Check valid characters
+    for (int i = index; num[i]; i++)
+    {
+        if (num[i] < '0' || num[i] > '9')
+            throw_error("Unknown Immediate Symbol");
+    }
+
+    for (int i = num_size - 1; i >= index; i--)
+    {
+        value += (num[i]-'0') * power;
+        power *= 10;
+    }
+
+    return (negative) ? -value : value;
+}
+
+int parse_imm(const char* norm_str, int* str_index)
+{
+    if (norm_str[*str_index] == ',')
+        throw_error("Empty Operand");
+
+    int tok_index = *str_index;
+    while (norm_str[tok_index] != ',' && norm_str[tok_index] != '\0')
+        tok_index++;
+
+    int tok_size = tok_index - *str_index + 1;
+    char* token = malloc(tok_size);
+
+    for (int i = 0; i < tok_size; i++)
+        token[i] = norm_str[*str_index+i];
+    token[tok_size-1] = '\0';
+    *str_index += tok_size - 1;
+
+    int ret = parse_int(token);
+    free(token);
+    return ret;
+}
+
+void parse_NO_TYPE(const char* norm_str, int* str_index, instr_t* parsed_instr)
+{
+    switch (parsed_instr->mnemonic) 
+    {
+    case FENCE:
+        const char* op[2];
+        op[0] = extract_token(norm_str, str_index);
+        op[1] = extract_token(norm_str, str_index);
+        parsed_instr->op[0].type = SPECIAL;
+        parsed_instr->op[1].type = SPECIAL;
+        parsed_instr->op[2].type = -1;
+
+        for (int i = 0; i < 2; i++)
+        {
+            int j = 0;
+            while (op[i][j])
+            {
+                switch (op[i][j++]) 
+                {
+                case 'i':
+                    if ((parsed_instr->op[i].val >> 3) & 1)
+                        throw_error("Double symbol in FENCE.");
+                    parsed_instr->op[i].val |= 1 << 3;
+                    break;
+
+                case 'o':
+                    if ((parsed_instr->op[i].val >> 2) & 1)
+                        throw_error("Double symbol in FENCE.");
+                    parsed_instr->op[i].val |= 1 << 2;
+                    break;
+
+                case 'r':
+                    if ((parsed_instr->op[i].val >> 1) & 1)
+                        throw_error("Double symbol in FENCE.");
+                    parsed_instr->op[i].val |= 1 << 1;
+                    break;
+
+                case 'w':
+                    if ((parsed_instr->op[i].val >> 0) & 1)
+                        throw_error("Double symbol in FENCE.");
+                    parsed_instr->op[i].val |= 1 << 0;
+                    break;
+                    
+                default:
+                    throw_error("Unknow symbol in FENCE (iorw).");
+                    break;
+                }
+            }
+
+            if (parsed_instr->op[i].val == 0)
+                throw_error("Empty Operand.");
+        }
+        break;
+
+    case ECALL:
+    case EBREAK:
+        parsed_instr->op[0].type = -1;
+        parsed_instr->op[1].type = -1;
+        parsed_instr->op[2].type = -1;
+        parsed_instr->op[0].val = -1;
+        parsed_instr->op[1].val = -1;
+        parsed_instr->op[2].val = -1;
+
+        if (norm_str[*str_index] != '\0')
+            throw_error("Excess operand");
+        return;
+    
+    default:
+        throw_error("Unknown \"NO_TYPE\" mnemonic.");
+        return;
     }
 
     return;
 }
 
-static bool skip_until(char* line, char c, int* pos)
+instr_t parse_instruction(const char* str)
 {
-    while (line[*pos] != c && line[*pos] != '\n')
-        (*pos)++;
+    // Expected form:
+    // Mnemonic op1, op2, op3
+    // Capitalization not checked
+    // ; is comment (ignore all letters after)
+    // Line MUST have a mnemonic to be properly parsed
+        // Whitespace only lines are expected to be skipped prior
 
-    // Maybe return here for info on if we found char
+    instr_t parsed_instr = {.mnemonic = ERROR_MNEMONIC, .type = -1};
+    line_num = 42;
 
-    return (line[*pos] == c);
-}
-
-static mnemonic_index detect_mnemonic(char* line, int* const pos)
-{
-    // Skip past labels
-    for (int i = 0; i < MAX_LINE_SIZE; i++)
+    for (int i = 0; true; )
     {
-        if (line[i] == '\n' || line[i] == '\0')
+        // Return an invalid/empty instr_t if this line is whitespace only
+        if (str[i] == '\0' || str[i] == ';')
+            return parsed_instr;
+        else if (str[i] == ' ')
+            continue;
+
+        break;
+    }
+
+
+    const char* norm_str = normalize_line(str);
+
+    int str_index = 0;
+    parsed_instr.mnemonic = parse_mnemonic(norm_str, &str_index);
+    if (parsed_instr.mnemonic == ERROR_MNEMONIC)
+    {
+        parsed_instr.type = ERROR_TYPE;
+        goto parse_switch_mnemonic;
+    }
+
+    parsed_instr.type = instr_defs[parsed_instr.mnemonic].type;
+
+    // Switch statement here for .type
+    // Then we can run an appropriate number of parse_operand
+    // Test for excess operands: throw error
+
+    
+    parse_switch_mnemonic:
+    switch(parsed_instr.type)
+    {
+        // rd, rs1, rs2
+        case R_TYPE:
+            parsed_instr.op[0].type = REGISTER;
+            parsed_instr.op[0].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[1].type = REGISTER;
+            parsed_instr.op[1].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[2].type = REGISTER;
+            parsed_instr.op[2].val = parse_reg(norm_str, &str_index);
+
             break;
 
-        if (line[i] == ':')
-            *pos = i+1;
+        // rd, rs1, imm
+        case I_TYPE:
+            parsed_instr.op[0].type = REGISTER;
+            parsed_instr.op[0].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[1].type = REGISTER;
+            parsed_instr.op[1].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[2].type = IMMEDIATE;
+            parsed_instr.op[2].val = parse_imm(norm_str, &str_index);
+
+            break;
+
+        // rs1, rs2, imm
+        case S_TYPE:
+            parsed_instr.op[0].type = REGISTER;
+            parsed_instr.op[0].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[1].type = REGISTER;
+            parsed_instr.op[1].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[2].type = IMMEDIATE;
+            parsed_instr.op[2].val = parse_imm(norm_str, &str_index);
+
+            break;
+
+        // rs1, rs2, imm
+        case B_TYPE:
+            parsed_instr.op[0].type = REGISTER;
+            parsed_instr.op[0].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[1].type = REGISTER;
+            parsed_instr.op[1].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[2].type = IMMEDIATE;
+            parsed_instr.op[2].val = parse_imm(norm_str, &str_index);
+
+            break;
+
+        // rd, imm
+        case U_TYPE:
+            parsed_instr.op[0].type = REGISTER;
+            parsed_instr.op[0].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[1].type = IMMEDIATE;
+            parsed_instr.op[1].val = parse_imm(norm_str, &str_index);
+
+            parsed_instr.op[2].type = -1;
+            parsed_instr.op[2].val = -1;
+
+            break;
+
+        // rd, imm
+        case J_TYPE:
+            parsed_instr.op[0].type = REGISTER;
+            parsed_instr.op[0].val = parse_reg(norm_str, &str_index);
+
+            parsed_instr.op[1].type = IMMEDIATE;
+            parsed_instr.op[1].val = parse_imm(norm_str, &str_index);
+
+            parsed_instr.op[2].type = -1;
+            parsed_instr.op[2].val = -1;
+
+            break;
+
+        // Special Mnemonic
+        case NO_TYPE:
+            parse_NO_TYPE(norm_str, &str_index, &parsed_instr);
+            break;
+        
+        // Unknown / Error
+        case ERROR_TYPE:
+            throw_error("Unknown Mnemonic");
+            break;
     }
 
-    // Skip whitespace
-    while (line[*pos] == ' ')
-        (*pos)++;
+    if (norm_str[str_index-1] == ',')
+        throw_error("Excess Operand");
 
-    // End of Line, return.
-    if(line[*pos] == '\n' || line[*pos] == '\0')
-        return EOF;
+    free(norm_str);
 
-    int start_pos = *pos;
-    skip_until(line, ' ', pos);
-
-    char* mnemonic = malloc(*pos - start_pos + 1);
-    for (int i = 0; i < *pos - start_pos; i++)
-        mnemonic[i] = line[start_pos + i];
-    mnemonic[*pos - start_pos] = '\0';
-
-    (*pos)++;
-
-    for (int i = 0; i < TOTAL_MNEMONICS; i++)
-    {
-        if (strcmp(mnemonic, instr_defs[i].str) == 0)
-        {
-            free(mnemonic);
-            return i;
-        }
-    }
-
-    printf("Error: Unknown mnemonic \"%s\" (Line: %d)\n", mnemonic, line_num);
-
-    exit(1);
+    return parsed_instr;
 }
 
-op_t detect_reg(char* line, int* pos)
-{
-    op_t op;
-    op.type = REGISTER;
-    
-    // Skip whitespace
-    while (line[*pos] == ' ')
-        (*pos)++;
-
-    // End of Line, error.
-    if(line[*pos] == '\n' || line[*pos] == '\0')
-    {
-        printf("Error: Expected register (Line: %d)\n", line_num);
-        exit(1);
-    }
-
-    int start_pos = *pos;
-    skip_until(line, ',', pos);
-    //! The skip here seems to work even for the last register. Test when finished.
-    
-    char* reg = malloc(*pos - start_pos + 1);
-    for (int i = 0; i < *pos - start_pos; i++)
-        reg[i] = line[start_pos + i];
-    reg[*pos - start_pos] = '\0';
-
-    (*pos)++;
-
-    // Identify register
-    for (int i = 0; i < TOTAL_REGS; i++)
-    {
-        if (strcmp(reg, reg_str_arr[i].str) == 0)
-        {
-            op.val = reg_str_arr[i].reg_index;
-            printf("Reg: %d\n", op.val);
-            free(reg);
-            return op;
-        }
-    }
-    printf("Error: Invalid register \"%s\" (Line: %d)\n", reg, line_num);
-    exit(1);
-}
-
-op_t detect_imm(char* line, int* pos)
-{
-    exit(1);
-}
-
-instr_t* parse_file(FILE* file, int instr_cnt)
-{
-    instr_t* tokens = malloc(instr_cnt * sizeof(instr_t));
-    
-    // Start from file beginning
-    rewind(file);
-
-    char line[MAX_LINE_SIZE+1];
-    int cur = 0;
-    while (fgets(line, MAX_LINE_SIZE, file))
-    {
-        int pos = 0;
-
-        normalize_line(line);
-
-        mnemonic_index mindex = detect_mnemonic(line, &pos);
-
-        if (mindex == EOF)
-            goto skip_instr;
-
-        tokens[cur].mnemonic = mindex;
-        tokens[cur].type = instr_defs[mindex].type;
-
-        switch (tokens[cur].type)
-        {
-            case R_TYPE:
-                tokens[cur].op[0] = detect_reg(line, &pos);
-                tokens[cur].op[1] = detect_reg(line, &pos);
-                tokens[cur].op[2] = detect_reg(line, &pos);
-                if (!skip_until(line, '\n', &pos))
-                {
-                    printf("Error: Too many operands (Line: %d)\n", line_num);
-                    exit(1);
-                }
-                break;
-            
-            case I_TYPE:
-            case S_TYPE:
-            case B_TYPE:
-                tokens[cur].op[0] = detect_reg(line, &pos);
-                tokens[cur].op[1] = detect_reg(line, &pos);
-                tokens[cur].op[2] = detect_imm(line, &pos);
-                if (!skip_until(line, '\n', &pos))
-                {
-                    printf("Error: Too many operands (Line: %d)\n", line_num);
-                    exit(1);
-                }
-                break;
-            
-            case U_TYPE:
-            case J_TYPE:
-                tokens[cur].op[0] = detect_reg(line, &pos);
-                tokens[cur].op[1] = detect_imm(line, &pos);
-                if (!skip_until(line, '\n', &pos))
-                {
-                    printf("Error: Too many operands (Line: %d)\n", line_num);
-                    exit(1);
-                }
-                break;
-            
-            case NO_TYPE:
-                printf("Error: Unhandled mnemonic \"%s\" (Line: %d)\n", instr_defs[mindex].str, line_num);
-                exit(1);
-            
-            
-        }
-
-        cur++;
-
-        skip_instr:
-        line_num++;
-    }
-
-
-    return tokens;
-}
