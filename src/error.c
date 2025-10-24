@@ -1,12 +1,19 @@
 #include "error.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 int line_num = 0;
 
-void throw_error(const char* str)
+void throw_error(const char* format, ...)
 {
-    printf("Error (line %d): %s\n", line_num, str);
+    va_list vargs;
+    va_start(vargs, format);
+
+    printf("Error (line %d): ", line_num);
+    vprintf(format, vargs);
+    printf("\n\n");
 
     exit(1);
 }
+
