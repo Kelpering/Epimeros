@@ -32,7 +32,7 @@ int main(int argc, char** argv)
 
   instr_set RV32I = 
   {
-    {"lui",     0b00000000000000000000000000110111, 4, U_PARSE},
+    {"lui",     0b00000000000000000000000000110111, 4, U_PARSE, U_TRANS},
     {"auipc",   0b00000000000000000000000000010111, 4, U_PARSE},
     {"jal",     0b00000000000000000000000001101111, 4, J_PARSE},
     {"jalr",    0b00000000000000000000000001100111, 4, I_PARSE},
@@ -106,6 +106,8 @@ int main(int argc, char** argv)
     //^ Dev facing: parse_helper.h, instr_set definiton, etc
     //^ Private: symtbl, parse_line, translation, etc
     //^ Public idea: instr_set.h/reg_set.h or std_sets.h
+
+    //! See translator.h (instr_t typedef) for more information.
   
   parser_ctx* ctx = init_parserctx(
     (instr_set*[]) {&RV32I, NULL}, 
@@ -118,4 +120,11 @@ int main(int argc, char** argv)
   fclose(file);
 
   return 0;
+}
+
+//^ Possible callback template
+//^ Also, make all instructions have a callback to produce opcodes
+uint32_t instr_callback_template(instr_t* instr, symtbl, labl_offset)
+{
+
 }

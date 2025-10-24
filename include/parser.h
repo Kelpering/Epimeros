@@ -205,11 +205,27 @@ int parse_line(char* line, int byte_offset, parser_ctx* ctx);
 //     int64_t val;    // Value associated with operand
 // } operand_t;
 // 
+
+
+
+// Mnemonics with a callback assigned for translation will always call.
+    // Null for skip translation steps
+// Most mnemonics will not need any further translation, so will
+// also skip within the function
+
+// Most likely translation requirement is going to be label handling.
+// These can be easily handled with op_type checking and parsing.
+    // If not already implemented, add an offset counter inside translator.c
+
+// Custom callback functions will likely allow for much further opcode manip.
+// Although there is a lack of "proprietary" information transfer support.
+// They will likely have to use workarounds with the operands to transfer
+// substantial data.
 typedef struct instr_t
 {
     mnemonic_index mnemonic;    // Index into instr_defs
-    instr_type type;            // Instruction type / error return.
-    operand_t op[3];            // 3 operands, can be NULL if type allows
+    operand_t* op;            // Container of operands, can be NULL if op_size=0
+    int op_size;
 } instr_t;
 // 
 // 
