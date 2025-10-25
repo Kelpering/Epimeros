@@ -226,6 +226,7 @@ typedef struct instr_t
     mnemonic_index mnemonic;    // Index into instr_defs
     operand_t* op;            // Container of operands, can be NULL if op_size=0
     int op_size;
+    struct instr_t* next;
 } instr_t;
 // 
 // 

@@ -1,4 +1,4 @@
-#include "parse_helper.h"
+#include "parser.h"
 #include "symtbl.h"
 #include <stdlib.h>
 #include <string.h>
@@ -125,4 +125,16 @@ void free_parserctx(parser_ctx* ctx)
   free(ctx);
 
   return;
+}
+
+instr_t* R_PARSE(const char* line, instr_def_t* instr_def, symbol_tbl* symtbl)
+{
+  instr_t* instr = malloc(sizeof(instr_t));
+
+  // Parse an expected number of operands
+  // If there are any symbols, handle them for symtbl
+  // Leave translation to R_TRANS
+  // Technically, R_TYPE doesn't need symtbl, keep consistent anyway.
+
+  return instr;
 }

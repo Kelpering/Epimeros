@@ -75,6 +75,8 @@ int main(int argc, char** argv)
     NULL
     };
 
+    // Pseudo ops can be declared as default macros
+
     reg_set RV32I_REGS = 
     {
       {"x0",  0},

@@ -5,8 +5,12 @@
 //? This file contains all of the helper functions, which are useful for
 //? custom callback functions.
 
+struct instr_t;
+typedef struct instr_t instr_t ;
 struct parser_ctx;
 
+struct instr_def_t;
+typedef struct instr_def_t instr_def_t ;
 typedef struct instr_def_t
 { 
   char* mnemonic;
@@ -34,7 +38,7 @@ typedef struct parser_ctx
   symbol_tbl* symtbl;
 } parser_ctx;
 
-void  R_PARSE(const char* line, instr_def_t* instr_def);
+instr_t*  R_PARSE(const char* line, instr_def_t* instr_def, symbol_tbl* symtbl);
 void  I_PARSE(const char* line, instr_def_t* instr_def);
 void  S_PARSE(const char* line, instr_def_t* instr_def);
 void  B_PARSE(const char* line, instr_def_t* instr_def);
