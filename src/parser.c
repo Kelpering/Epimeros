@@ -1,6 +1,7 @@
 #include "parser.h"
 #include "error.h"
 #include <stdlib.h>
+#include <string.h>
 #include "symtbl.h"
 
 #include "stdio.h"
@@ -23,11 +24,12 @@ void normalize_line(char* line, char* norm_buf)
     // Special
     switch (c)
     {
-      case ',':
-      case '_':
-      case '.':
       case ' ':
+      case ',':
+      case '-':
+      case '.':
       case ':':
+      case '_':
         continue;
 
       // End of Line
@@ -111,14 +113,22 @@ void normalize_line(char* line, char* norm_buf)
   while(true)
   {
     char c = line[line_pos++];
-    if (('a' <= c && c <= 'z') || c == '.')
+    if (('a' <= c && c <= 'z') || c == '.') {
       norm_buf[norm_pos++] = c;
-    else if ('A' <= c && c <= 'Z')
+    }
+    else if ('A' <= c && c <= 'Z') {
       norm_buf[norm_pos++] = c + 32;
-    else if (c == ' ' || c == '\0')
+    }
+    else if (c == '\0') {
+      norm_buf[norm_pos++] = ' ';
       break;
-    else
+    }
+    else if (c == ' ') {
+      break;
+    }
+    else {
       throw_error("Invalid mnemonic character \'%c\'", c);
+    }
   }
   if (!line[line_pos-1])
     goto str_finish;
@@ -136,7 +146,7 @@ void normalize_line(char* line, char* norm_buf)
   {
     char c = line[line_pos++];
     if (('a' <= c && c <= 'z') || ('0' <= c && c <= '9') || 
-        (c == '.') || (c == '_'))
+        (c == '.') || (c == '_') || (c == '-'))
     {
       if (whitespace && norm_buf[norm_pos-1] != ',')
         throw_error("Split token");
@@ -177,7 +187,19 @@ void normalize_line(char* line, char* norm_buf)
   return;
 }
 
-int parse_line(char* line, int byte_offset, parser_ctx* ctx)
+uint32_t search_mnemonic(const char* mnemonic, parser_ctx* ctx)
+{
+  for (int i = 0; i < ctx->instr_count; i++)
+  {
+    if (strcmp(mnemonic, ctx->instr_list[i].mnemonic) == 0)
+      return i;
+  }
+
+  throw_error("Unknown mnemonic \"%s\"", mnemonic);
+}
+
+
+instr_t* parse_line(char* line, int byte_offset, parser_ctx* ctx)
 {
   int line_pos = 0;
   char norm_line[100];
@@ -187,13 +209,13 @@ int parse_line(char* line, int byte_offset, parser_ctx* ctx)
   normalize_line(line, norm_line);
 
   // Detect and parse label
-  for (int i = 0; line[i]; i++)
+  for (int i = 0; norm_line[i]; i++)
   {
-    if (line[i] == ':')
+    if (norm_line[i] == ':')
     {
       int j;
-      for (j = 0; line[j] != ':'; j++)
-        temp_buf[j] = line[j];
+      for (j = 0; norm_line[j] != ':'; j++)
+        temp_buf[j] = norm_line[j];
       temp_buf[j] = '\0';
       allocate_symbol(temp_buf, byte_offset, ctx->symtbl);
       line_pos = i+1;
@@ -201,23 +223,19 @@ int parse_line(char* line, int byte_offset, parser_ctx* ctx)
     }
   }
 
-  
-
   // Break early if EOL
-  if (!line[line_pos])
-    return 0;
+  if (!norm_line[line_pos])
+    return NULL;
 
   // Detect and parse mnemonic
-  for (int i = 0; line[line_pos] != ' '; i++)
-    temp_buf[i] = line[line_pos++];
+  for (int i = 0; norm_line[line_pos] != ' '; i++)
+    temp_buf[i] = norm_line[line_pos++];
   temp_buf[line_pos++] = '\0';
 
+  uint32_t mnemonic_index = search_mnemonic(temp_buf, ctx);
 
-
-  //! Break early if EOL
-  if (!line[line_pos])
-    return -1;
-  
+  const instr_def_t* def = &ctx->instr_list[mnemonic_index];
+  instr_t* instr = def->parse_cb(&norm_line[line_pos], def, ctx);
 
   //* Normalize line
   //^ Detect and allocate label
@@ -226,6 +244,8 @@ int parse_line(char* line, int byte_offset, parser_ctx* ctx)
   //^ Send rest of string (operands) to callback
   //^ Design primary callback functions
   //^ Design parse helper functions
+
+  return instr;
 }
 
 

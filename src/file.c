@@ -1,6 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "file.h"
 #include "error.h"
+#include "translator.h"
 
 
 void parse_file(FILE* file, parser_ctx* ctx)
@@ -8,6 +10,13 @@ void parse_file(FILE* file, parser_ctx* ctx)
   line_num = 0;
   int byte_offset = 0;
   char line_buf[100];
+
+  instr_t* head = malloc(sizeof(instr_t));
+  head->def = NULL;
+  head->next = NULL;
+  head->op = NULL;
+  head->op_size = 0;
+  instr_t* next_node = head;
 
   rewind(file);
   while(fgets(line_buf, sizeof(line_buf), file))
@@ -21,10 +30,36 @@ void parse_file(FILE* file, parser_ctx* ctx)
       throw_error("Line buffer overflow");
 
     // [label:][mnemonic][ops...]{;Comments / Newlines are replaced with '\0'}
-    byte_offset += parse_line(line_buf, byte_offset, ctx);
-
     
+    //? Attach another node for each instruction (skip empty lines).
+    instr_t* temp = parse_line(line_buf, byte_offset, ctx);
+    if (temp)
+    {
+      next_node->next = temp;
+      next_node = next_node->next;
+    }
   }
+  instr_t* curr_instr = head->next;
+  
+  while(curr_instr)
+  {
+    uint32_t hex = curr_instr->def->trans_cb(curr_instr, ctx);
+    printf("HEXCODE: 0x%x\n", hex);
+
+    curr_instr = curr_instr->next;
+  }
+
+  // Free
+  instr_t* tmp = head;
+  while(tmp)
+  {
+    instr_t* t = tmp->next;
+    free(tmp->op);
+    free(tmp);
+    tmp = t;
+  }
+
+  return;
 }
 // void parse_file(FILE* asm_file)
 // {

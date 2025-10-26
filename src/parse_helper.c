@@ -35,7 +35,9 @@ parser_ctx* init_parserctx(instr_set* instr_sets[], reg_set* reg_sets[])
     {
       ctx->instr_list[instr_ctr].mnemonic = strdup(set[j].mnemonic);
       ctx->instr_list[instr_ctr].byte_size = set[j].byte_size;
-      ctx->instr_list[instr_ctr].callback = set[j].callback;
+      ctx->instr_list[instr_ctr].opcode = set[j].opcode;
+      ctx->instr_list[instr_ctr].parse_cb = set[j].parse_cb;
+      ctx->instr_list[instr_ctr].trans_cb = set[j].trans_cb;
 
       for (int k = 0; ctx->instr_list[instr_ctr].mnemonic[k]; k++)
       {
@@ -54,7 +56,7 @@ parser_ctx* init_parserctx(instr_set* instr_sets[], reg_set* reg_sets[])
     {
       if (strcmp(ctx->instr_list[i].mnemonic, ctx->instr_list[j].mnemonic) == 0)
       {
-        throw_error("Duplicate register definition \"%s\"", 
+        throw_error("Duplicate instruction definition \"%s\"", 
                     ctx->instr_list[i].mnemonic);
       }
     }
@@ -127,14 +129,325 @@ void free_parserctx(parser_ctx* ctx)
   return;
 }
 
-instr_t* R_PARSE(const char* line, instr_def_t* instr_def, symbol_tbl* symtbl)
+char* extract_token(const char* line, int* str_index)
 {
-  instr_t* instr = malloc(sizeof(instr_t));
+  int t = *str_index;
+  while (line[t] != ',' && line[t] != '\n' && line[t] != '\0')
+    t++;
+  t++;
 
-  // Parse an expected number of operands
-  // If there are any symbols, handle them for symtbl
-  // Leave translation to R_TRANS
-  // Technically, R_TYPE doesn't need symtbl, keep consistent anyway.
+  int token_size = t - *str_index;
+  char* token = malloc(token_size);
 
-  return instr;
+  for (int i = 0; i < token_size; i++)
+    token[i] = line[(*str_index)++];
+  token[token_size-1] = '\0';
+
+  return token;
 }
+
+op_t parse_reg(const char* line, int* str_index, parser_ctx* ctx)
+{
+  if (line[*str_index] == ',')
+    throw_error("Empty operand");
+
+  char* token = extract_token(line, str_index);
+
+  int reg = -1;
+  for (int i = 0; i < ctx->reg_count; i++)
+  {
+    if (strcmp(token, ctx->reg_list[i].str) == 0)
+      reg = ctx->reg_list[i].reg_index;
+  }
+  free(token);
+
+  if (reg == -1)
+    throw_error("Unknown register");
+
+  op_t op =
+  {
+    .val.u64 = reg,
+    .type = REGISTER
+  };
+
+  return op;
+}
+
+op_t parse_int(const char* token, parser_ctx* ctx)
+{
+  op_t op = 
+  {
+    .val.i64 = 0,
+    .type = IMMEDIATE
+  };
+
+  int token_size = 0;
+  while(token[token_size])
+    token_size++;
+
+  int power = 1;
+  int tok_index = 0;
+  bool negative = false;
+
+  if (token[tok_index] == '-')
+  {
+    negative = true;
+    tok_index++;
+  }
+
+  // Different base processing
+  if (token[tok_index] == '0')
+  {
+    tok_index++;
+    switch (token[tok_index++]) 
+    {
+      case 'b':
+        // Check valid characters
+        for (int i = tok_index; token[i]; i++)
+        {
+          if (token[i] < '0' || token[i] > '1')
+            throw_error("Unknown Immediate Symbol");
+        }
+          
+        for (int i = token_size - 1; i >= tok_index; i--)
+        {
+          op.val.i64 += (token[i]-'0') * power;
+          power *= 2;
+        }
+
+        if (negative)
+          op.val.i64 = -(op.val.i64);
+        free(token);
+        return op;
+
+      case 'x':
+        // Check valid characters
+        for (int i = tok_index; token[i]; i++)
+        {
+          if ((token[i] < '0' || token[i] > '9') &&
+              (token[i] < 'a' || token[i] > 'f'))
+          {
+            throw_error("Unknown Immediate Symbol");
+          }
+        }
+          
+        for (int i = token_size - 1; i >= tok_index; i--)
+        {
+          int digit;
+          if (token[i] >= 'a')
+            digit = token[i] - 'a' + 10;
+          else
+            digit = token[i] - '0';   
+          op.val.i64 += digit * power;
+          power *= 16;
+        }
+          
+        if (negative)
+          op.val.i64 = -(op.val.i64);
+        free(token);
+        return op;
+        
+      default:
+        tok_index -= 2;
+        // Intentional fallthrough to default base 10 integer processing.
+    }
+  }
+
+  // Check valid characters
+  for (int i = tok_index; token[i]; i++)
+  {
+    if (token[i] < '0' || token[i] > '9')
+      throw_error("Unknown Immediate Symbol");
+  }
+
+  for (int i = token_size - 1; i >= tok_index; i--)
+  {
+    op.val.i64 += (token[i]-'0') * power;
+    power *= 10;
+  }
+
+  if (negative)
+    op.val.i64 = -(op.val.i64);
+  free(token);
+  return op;
+}
+
+op_t parse_label(const char* line, parser_ctx* ctx)
+{
+  throw_error("LABEL NOT IMPLEMENTED (parse_helper.c)");
+}
+
+op_t parse_imm(const char* line, int* str_index, parser_ctx* ctx)
+{
+  if (line[*str_index] == ',')
+    throw_error("Empty Operand");
+
+  char* token = extract_token(line, str_index);
+
+  if (('0' <= token[0] && token[0] <= '9') || token[0] == '-')
+    return parse_int(token, ctx);
+  else
+    return parse_label(token, ctx);
+}
+
+
+// 
+// int parse_reg(const char* norm_str, int* str_index)
+// {
+//     if (norm_str[*str_index] == ',')
+//         throw_error("Empty Operand");
+//     
+//     int tok_index = *str_index;
+//     while (norm_str[tok_index] != ',' && norm_str[tok_index] != '\0')
+//         tok_index++;
+//     tok_index++;
+// 
+//     int tok_size = tok_index - *str_index;
+//     char* token = malloc(tok_size);
+// 
+//     for (int i = 0; i < tok_size; i++)
+//         token[i] = norm_str[*str_index+i];
+//     token[tok_size-1] = '\0';
+//     *str_index += tok_size;
+// 
+//     int reg = -1;
+//     for (int i = 0; i < sizeof(reg_defs)/sizeof(reg_defs[i]); i++)
+//     {   
+//         if (strcmp(token, reg_defs[i].str) == 0)
+//             reg = i;
+//     }
+//     free(token);
+// 
+//     if (reg == -1)
+//         throw_error("Unknown register");
+// 
+//     return reg;
+// }
+// 
+// const char* extract_token(const char* norm_str, int* str_index)
+// {
+//     // We can probably use this in all of the other 
+//     // parse functions, in revision two.
+// 
+//     if (norm_str[*str_index] == ',' || norm_str[*str_index] == '\0')
+//         throw_error("Empty Operand");
+// 
+//     int tok_index = *str_index;
+//     while (norm_str[tok_index] != ',' && norm_str[tok_index] != '\0')
+//         tok_index++;
+// 
+//     int tok_size = tok_index - *str_index + 1;
+//     char* token = malloc(tok_size);
+// 
+//     for (int i = 0; i < tok_size; i++)
+//         token[i] = norm_str[*str_index+i];
+//     token[tok_size-1] = '\0';
+//     *str_index += tok_size;
+// 
+//     return token;
+// }
+// 
+// int parse_int(const char* num)
+// {
+//     int num_size = 0;
+//     int index = 0;
+//     while (num[num_size++]);
+//     num_size--;
+//     
+//     int power = 1;
+//     int64_t value = 0;
+//     bool negative = false;
+// 
+//     if (num[index] == '-')
+//     {
+//         negative = true;
+//         index++;
+//     }
+// 
+//     if (num[index] == '0')
+//     {
+//         index++;
+//         switch (num[index++]) 
+//         {
+//             case 'b':
+//                 // Check valid characters
+//                 for (int i = index; num[i]; i++)
+//                 {
+//                     if (num[i] < '0' || num[i] > '1')
+//                         throw_error("Unknown Immediate Symbol");
+//                 }
+//                 
+//                 for (int i = num_size - 1; i >= index; i--)
+//                 {
+//                     value += (num[i]-'0') * power;
+//                     power *= 2;
+//                 }
+//                 
+//                 return (negative) ? -value : value;
+// 
+//             case 'x':
+//                 // Check valid characters
+//                 for (int i = index; num[i]; i++)
+//                 {
+//                     if ((num[i] < '0' || num[i] > '9') &&
+//                         (num[i] < 'a' || num[i] > 'f'))
+//                     {
+//                         throw_error("Unknown Immediate Symbol");
+//                     }
+//                 }
+//                 
+//                 for (int i = num_size - 1; i >= index; i--)
+//                 {
+//                     int digit;
+//                     if (num[i] >= 'a')
+//                         digit = num[i] - 'a' + 10;
+//                     else
+//                         digit = num[i] - '0';   
+//                     value += digit * power;
+//                     power *= 16;
+//                 }
+//                 
+//                 return (negative) ? -value : value;
+//             default:
+//                 index -= 2;
+//                 // Intentional fallthrough to default integer processing.
+//         }
+//     }
+//     
+//     // Check valid characters
+//     for (int i = index; num[i]; i++)
+//     {
+//         if (num[i] < '0' || num[i] > '9')
+//             throw_error("Unknown Immediate Symbol");
+//     }
+// 
+//     for (int i = num_size - 1; i >= index; i--)
+//     {
+//         value += (num[i]-'0') * power;
+//         power *= 10;
+//     }
+// 
+//     return (negative) ? -value : value;
+// }
+// 
+// int parse_imm(const char* norm_str, int* str_index)
+// {
+//     if (norm_str[*str_index] == ',')
+//         throw_error("Empty Operand");
+// 
+//     int tok_index = *str_index;
+//     while (norm_str[tok_index] != ',' && norm_str[tok_index] != '\0')
+//         tok_index++;
+// 
+//     int tok_size = tok_index - *str_index + 1;
+//     char* token = malloc(tok_size);
+// 
+//     for (int i = 0; i < tok_size; i++)
+//         token[i] = norm_str[*str_index+i];
+//     token[tok_size-1] = '\0';
+//     *str_index += tok_size - 1;
+// 
+//     int ret = parse_int(token);
+//     free(token);
+//     return ret;
+// }

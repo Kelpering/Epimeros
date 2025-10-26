@@ -2,9 +2,84 @@
 #define __EPIMEROS_PARSER_H__
 #include <stddef.h>
 #include <stdint.h>
-#include "parse_helper.h"
+#include "symtbl.h"
 
-int parse_line(char* line, int byte_offset, parser_ctx* ctx);
+typedef struct parser_ctx parser_ctx;
+typedef struct instr_def_t instr_def_t;
+typedef struct instr_t instr_t;
+typedef struct op_t op_t;
+
+struct parser_ctx;
+struct instr_def_t;
+struct instr_t;
+struct op_t;
+
+typedef enum op_type
+{
+  REGISTER,
+  IMMEDIATE,
+  LABEL
+} op_type;
+
+struct op_t
+{
+  union
+  {
+    uint64_t u64;
+    int64_t i64;
+    void* ptr;
+  } val;
+  op_type type;
+};
+
+struct instr_t
+{
+    const instr_def_t* def;
+    op_t* op;
+    int op_size;
+    instr_t* next;
+};
+
+struct parser_ctx;
+
+struct instr_def_t
+{ 
+  char* mnemonic;
+  uint32_t opcode;
+  int byte_size;
+  instr_t* (*parse_cb)(
+    const char* line, 
+    const instr_def_t* def, 
+    parser_ctx* ctx
+  );
+  uint32_t (*trans_cb)(
+    instr_t* instr, 
+    parser_ctx* ctx
+  );
+
+};
+typedef const instr_def_t instr_set[];
+
+typedef struct reg_def_t
+{
+  char* str;
+  uint8_t reg_index;
+} reg_def_t;
+typedef const reg_def_t reg_set[];
+
+typedef struct parser_ctx
+{
+  instr_def_t* instr_list;
+  int instr_count;
+  reg_def_t* reg_list;
+  int reg_count;
+  symbol_tbl* symtbl;
+} parser_ctx;
+
+parser_ctx* init_parserctx(instr_set* sets[],  reg_set* reg_sets[]);
+void free_parserctx(parser_ctx* ctx);
+
+instr_t* parse_line(char* line, int byte_offset, parser_ctx* ctx);
 
 // // All instruction types
 // typedef enum
@@ -221,13 +296,6 @@ int parse_line(char* line, int byte_offset, parser_ctx* ctx);
 // Although there is a lack of "proprietary" information transfer support.
 // They will likely have to use workarounds with the operands to transfer
 // substantial data.
-typedef struct instr_t
-{
-    mnemonic_index mnemonic;    // Index into instr_defs
-    operand_t* op;            // Container of operands, can be NULL if op_size=0
-    int op_size;
-    struct instr_t* next;
-} instr_t;
 // 
 // 
 // instr_t parse_instruction(const char* str);

@@ -1,5 +1,6 @@
-// #include "translator.h"
-// #include "error.h"
+#include "translator.h"
+#include "error.h"
+#include <stdio.h>
 // 
 // uint32_t process_imm(int64_t imm, instr_type type)
 // {
@@ -114,6 +115,7 @@
 //     }
 // }
 // 
+
 // uint32_t translate_instr(instr_t instr)
 // {
 //     uint32_t bytecode = instr_defs[instr.mnemonic].opcode;
