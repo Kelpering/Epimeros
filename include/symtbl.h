@@ -5,8 +5,8 @@
 typedef enum sym_type
 {
   SYM_EMPTY     = 0,
-  SYM_ALLOCATED = 1,
-  SYM_EXPECTED  = 2
+  SYM_LABEL_ALLOCATED = 1,
+  SYM_LABEL_EXPECTED  = 2,
 } sym_type;
 
 typedef struct sym_t

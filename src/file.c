@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include "file.h"
 #include "error.h"
-#include "translator.h"
 
 
 void parse_file(FILE* file, parser_ctx* ctx)
@@ -44,7 +43,7 @@ void parse_file(FILE* file, parser_ctx* ctx)
   while(curr_instr)
   {
     uint32_t hex = curr_instr->def->trans_cb(curr_instr, ctx);
-    printf("HEXCODE: 0x%x\n", hex);
+    printf("HEXCODE: 0x%.8x\n", hex);
 
     curr_instr = curr_instr->next;
   }

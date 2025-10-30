@@ -71,7 +71,7 @@ void allocate_symbol(const char* label, int byte_offset, symbol_tbl* symtbl)
     symtbl->sym[sym_index].label[i] = label[i];
 
   symtbl->sym[sym_index].byte_offset = byte_offset;
-  symtbl->sym[sym_index].type = SYM_ALLOCATED;
+  symtbl->sym[sym_index].type = SYM_LABEL_ALLOCATED;
 
   symtbl->occupied++;
   if (symtbl->occupied >= symtbl->allocated)
@@ -103,7 +103,7 @@ uint32_t search_symbol(const char* label, symbol_tbl* symtbl)
     symtbl->sym[sym_index].label[i] = label[i];
 
   symtbl->sym[sym_index].byte_offset = 0;
-  symtbl->sym[sym_index].type = SYM_EXPECTED;
+  symtbl->sym[sym_index].type = SYM_LABEL_EXPECTED;
 
   symtbl->occupied++;
   if (symtbl->occupied >= symtbl->allocated)

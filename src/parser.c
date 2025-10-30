@@ -35,7 +35,7 @@ void normalize_line(char* line, char* norm_buf)
       // End of Line
       case '\0':
       case '\n':
-      case ';':
+      case '#':
         line[i] = '\0';
         goto end_char_check;
     }

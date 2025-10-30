@@ -1,10 +1,7 @@
-#include "parser.h"
-#include "symtbl.h"
+#include "parse_helper.h"
+#include "error.h"
 #include <stdlib.h>
 #include <string.h>
-#include "error.h"
-
-#include <stdio.h>
 
 parser_ctx* init_parserctx(instr_set* instr_sets[], reg_set* reg_sets[])
 {
@@ -167,18 +164,42 @@ op_t parse_reg(const char* line, int* str_index, parser_ctx* ctx)
   op_t op =
   {
     .val.u64 = reg,
-    .type = REGISTER
+    .type = REGISTER,
+    .macro_cb = NULL
   };
 
   return op;
 }
 
-op_t parse_int(const char* token, parser_ctx* ctx)
+op_t parse_imm_macro(const char* token, parser_ctx* ctx)
 {
   op_t op = 
   {
     .val.i64 = 0,
-    .type = IMMEDIATE
+    .type = MACRO,
+    .macro_cb = NULL
+  };
+
+  
+
+  return op;
+}
+
+op_t parse_imm(const char* line, int* str_index, parser_ctx* ctx)
+{
+  if (line[*str_index] == ',')
+    throw_error("Empty Operand");
+
+  char* token = extract_token(line, str_index);
+
+  if (token[0] == '%')
+    return parse_label_macro(token, ctx);
+
+  op_t op = 
+  {
+    .val.i64 = 0,
+    .type = IMMEDIATE,
+    .macro_cb = NULL
   };
 
   int token_size = 0;
@@ -271,183 +292,3 @@ op_t parse_int(const char* token, parser_ctx* ctx)
   free(token);
   return op;
 }
-
-op_t parse_label(const char* line, parser_ctx* ctx)
-{
-  throw_error("LABEL NOT IMPLEMENTED (parse_helper.c)");
-}
-
-op_t parse_imm(const char* line, int* str_index, parser_ctx* ctx)
-{
-  if (line[*str_index] == ',')
-    throw_error("Empty Operand");
-
-  char* token = extract_token(line, str_index);
-
-  if (('0' <= token[0] && token[0] <= '9') || token[0] == '-')
-    return parse_int(token, ctx);
-  else
-    return parse_label(token, ctx);
-}
-
-
-// 
-// int parse_reg(const char* norm_str, int* str_index)
-// {
-//     if (norm_str[*str_index] == ',')
-//         throw_error("Empty Operand");
-//     
-//     int tok_index = *str_index;
-//     while (norm_str[tok_index] != ',' && norm_str[tok_index] != '\0')
-//         tok_index++;
-//     tok_index++;
-// 
-//     int tok_size = tok_index - *str_index;
-//     char* token = malloc(tok_size);
-// 
-//     for (int i = 0; i < tok_size; i++)
-//         token[i] = norm_str[*str_index+i];
-//     token[tok_size-1] = '\0';
-//     *str_index += tok_size;
-// 
-//     int reg = -1;
-//     for (int i = 0; i < sizeof(reg_defs)/sizeof(reg_defs[i]); i++)
-//     {   
-//         if (strcmp(token, reg_defs[i].str) == 0)
-//             reg = i;
-//     }
-//     free(token);
-// 
-//     if (reg == -1)
-//         throw_error("Unknown register");
-// 
-//     return reg;
-// }
-// 
-// const char* extract_token(const char* norm_str, int* str_index)
-// {
-//     // We can probably use this in all of the other 
-//     // parse functions, in revision two.
-// 
-//     if (norm_str[*str_index] == ',' || norm_str[*str_index] == '\0')
-//         throw_error("Empty Operand");
-// 
-//     int tok_index = *str_index;
-//     while (norm_str[tok_index] != ',' && norm_str[tok_index] != '\0')
-//         tok_index++;
-// 
-//     int tok_size = tok_index - *str_index + 1;
-//     char* token = malloc(tok_size);
-// 
-//     for (int i = 0; i < tok_size; i++)
-//         token[i] = norm_str[*str_index+i];
-//     token[tok_size-1] = '\0';
-//     *str_index += tok_size;
-// 
-//     return token;
-// }
-// 
-// int parse_int(const char* num)
-// {
-//     int num_size = 0;
-//     int index = 0;
-//     while (num[num_size++]);
-//     num_size--;
-//     
-//     int power = 1;
-//     int64_t value = 0;
-//     bool negative = false;
-// 
-//     if (num[index] == '-')
-//     {
-//         negative = true;
-//         index++;
-//     }
-// 
-//     if (num[index] == '0')
-//     {
-//         index++;
-//         switch (num[index++]) 
-//         {
-//             case 'b':
-//                 // Check valid characters
-//                 for (int i = index; num[i]; i++)
-//                 {
-//                     if (num[i] < '0' || num[i] > '1')
-//                         throw_error("Unknown Immediate Symbol");
-//                 }
-//                 
-//                 for (int i = num_size - 1; i >= index; i--)
-//                 {
-//                     value += (num[i]-'0') * power;
-//                     power *= 2;
-//                 }
-//                 
-//                 return (negative) ? -value : value;
-// 
-//             case 'x':
-//                 // Check valid characters
-//                 for (int i = index; num[i]; i++)
-//                 {
-//                     if ((num[i] < '0' || num[i] > '9') &&
-//                         (num[i] < 'a' || num[i] > 'f'))
-//                     {
-//                         throw_error("Unknown Immediate Symbol");
-//                     }
-//                 }
-//                 
-//                 for (int i = num_size - 1; i >= index; i--)
-//                 {
-//                     int digit;
-//                     if (num[i] >= 'a')
-//                         digit = num[i] - 'a' + 10;
-//                     else
-//                         digit = num[i] - '0';   
-//                     value += digit * power;
-//                     power *= 16;
-//                 }
-//                 
-//                 return (negative) ? -value : value;
-//             default:
-//                 index -= 2;
-//                 // Intentional fallthrough to default integer processing.
-//         }
-//     }
-//     
-//     // Check valid characters
-//     for (int i = index; num[i]; i++)
-//     {
-//         if (num[i] < '0' || num[i] > '9')
-//             throw_error("Unknown Immediate Symbol");
-//     }
-// 
-//     for (int i = num_size - 1; i >= index; i--)
-//     {
-//         value += (num[i]-'0') * power;
-//         power *= 10;
-//     }
-// 
-//     return (negative) ? -value : value;
-// }
-// 
-// int parse_imm(const char* norm_str, int* str_index)
-// {
-//     if (norm_str[*str_index] == ',')
-//         throw_error("Empty Operand");
-// 
-//     int tok_index = *str_index;
-//     while (norm_str[tok_index] != ',' && norm_str[tok_index] != '\0')
-//         tok_index++;
-// 
-//     int tok_size = tok_index - *str_index + 1;
-//     char* token = malloc(tok_size);
-// 
-//     for (int i = 0; i < tok_size; i++)
-//         token[i] = norm_str[*str_index+i];
-//     token[tok_size-1] = '\0';
-//     *str_index += tok_size - 1;
-// 
-//     int ret = parse_int(token);
-//     free(token);
-//     return ret;
-// }

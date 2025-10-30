@@ -280,35 +280,6 @@ instr_t* FENCE_PARSE(
   //! Must be custom
 }
 
-// case I_TYPE:
-
-//             break;
-//         
-//         // rs1, rs2, imm
-//         case S_TYPE:
-
-//             break;
-// 
-//         // rs1, rs2, imm
-//         case B_TYPE:
-
-//             break;
-// 
-//         // rd, imm
-//         case U_TYPE:
-
-// 
-//         // rd, imm
-
-// 
-//         // Special Mnemonic
-
-// 
-//         // Unknown / Error
-//         case ERROR_TYPE:
-//             throw_error("Error Mnemonic Translation");
-//             break;
-
 uint32_t R_TRANS(instr_t* instr, parser_ctx* ctx)
 {
   uint32_t bytecode = instr->def->opcode;
@@ -326,6 +297,10 @@ uint32_t I_TRANS(instr_t* instr, parser_ctx* ctx)
   bytecode |= instr->op[1].val.u64 << 15;
 
   int64_t imm = instr->op[2].val.i64;
+  if (instr->op[2].type == MACRO)
+    imm = instr->op[2].val.macro_cb(imm, ctx);
+
+
   if ((imm > (1<<11)-1) | (imm < -(1<<11)))
     throw_error("Immediate Out of Range");
 

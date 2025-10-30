@@ -18,7 +18,7 @@ typedef enum op_type
 {
   REGISTER,
   IMMEDIATE,
-  LABEL
+  MACRO
 } op_type;
 
 struct op_t
@@ -27,8 +27,8 @@ struct op_t
   {
     uint64_t u64;
     int64_t i64;
-    void* ptr;
   } val;
+  int64_t (*macro_cb)(int64_t label, parser_ctx* ctx);
   op_type type;
 };
 

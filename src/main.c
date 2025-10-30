@@ -30,25 +30,29 @@ int main(int argc, char** argv)
 
   if (file == NULL)
     throw_error("File not found.", 0);
-  //^ We need to reorganize the entire parse_helper and parser headers
-  //^ Current idea:
-    //^ We initialize parser_ctx with any instruction and register sets required
-    //^ for operation. Instruction sets contain a list of definitions.
-    //^ Each definition has a mnemonic string, partial opcode, byte size,
-    //^ and a callback function.
-    
-    //^ The callback function will create an instruction that we can save.
-    //^ Then the callback can add a translation callback to the instr_t*
-    //^ This callback will be executed during translation, allowing for
-    //^ seamless label parsing.
+  //^ Labels
+    //^ Risc-V labels rely almost entirely upon macros
+    //^ %hi/%lo or %pcrel_* are integral to direct label handling.
+    //^ Inter Label-Macro processing almost necessitates two-pass architecture
+      //* Maybe if we implement something in trans_cb?
+      //* Maybe a LABEL_MACRO operand?
+      //* Because I'm kinda proud of my current one-pass system.
+  //^ Pseudo-Ops
+    //! We might just want to implement these separate from label/macro
+    //! Just write custom parse/trans func calls
 
-    //^ Overall, the project has to be reorganized.
-    //^ Public facing: init_parserctx, parse_file, etc
-    //^ Dev facing: parse_helper.h, instr_set definiton, etc
-    //^ Private: symtbl, parse_line, translation, etc
-    //^ Public idea: instr_set.h/reg_set.h or std_sets.h
+  //^ Overall, the project has to be reorganized.
+  //^ Public facing: init_parserctx, parse_file, etc
+  //^ Dev facing: parse_helper.h, instr_set definiton, etc
+  //^ Private: symtbl, parse_line, translation, etc
+  //^ Public idea: instr_set.h/reg_set.h or std_sets.h
 
     //! See translator.h (instr_t typedef) for more information.
+
+  
+  //^ Macro preprocessing
+    //^ Preprocess code.asm -> code.asm.i
+    //^ 
   
   parser_ctx* ctx = init_parserctx(
     (instr_set*[]) {&RV32I, NULL}, 
