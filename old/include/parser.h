@@ -74,9 +74,10 @@ typedef struct parser_ctx
   reg_def_t* reg_list;
   int reg_count;
   symbol_tbl* symtbl;
+  int starting_offset;
 } parser_ctx;
 
-parser_ctx* init_parserctx(instr_set* sets[],  reg_set* reg_sets[]);
+parser_ctx* init_parserctx(instr_set* sets[],  reg_set* reg_sets[], int offset);
 void free_parserctx(parser_ctx* ctx);
 
 instr_t* parse_line(char* line, int byte_offset, parser_ctx* ctx);

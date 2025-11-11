@@ -1,4 +1,4 @@
-#include "private/error.h"
+#include "error.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,3 +16,4 @@ void throw_error(const char* format, ...)
 
     exit(1);
 }
+

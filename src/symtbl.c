@@ -1,131 +1,93 @@
+#include "private/symtbl.h"
+#include "private/error.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "symtbl.h"
-#include "error.h"
 
-#include <stdio.h>
+void expand_symtbl(uint32_t new_capacity, symtbl_t* symtbl);
 
-symbol_tbl* init_symtbl()
+symtbl_t* init_symtbl()
 {
-  symbol_tbl* symtbl = malloc(sizeof(symbol_tbl));
+  symtbl_t* symtbl = malloc(sizeof(symtbl_t));
+  if(!symtbl)
+    throw_error("Out of Memory");
 
-  symtbl->sym = malloc(sizeof(sym_t) * 16);
-  symtbl->occupied = 0;
-  symtbl->allocated = 16;
-
-  for (int i = 0; i < 16; i++)
-  {
-    symtbl->sym[i].label = NULL;
-    symtbl->sym[i].byte_offset = 0;
-    symtbl->sym[i].type = SYM_EMPTY;
-  }
+  symtbl->size = 0;
+  symtbl->capacity = 0;
+  expand_symtbl(16, symtbl);
 
   return symtbl;
 }
 
-void free_symtbl(symbol_tbl* symtbl)
+void expand_symtbl(uint32_t new_capacity, symtbl_t* symtbl)
 {
-  for (int i = 0; i < symtbl->occupied; i++)
-    free(symtbl->sym[i].label);
+  if (symtbl->capacity >= new_capacity)
+    throw_error("Cannot shrink SymTbl capacity");
 
-  free(symtbl->sym);
-  free(symtbl);
+  symtbl->capacity = new_capacity;
+  symbol_t* new = malloc(sizeof(symbol_t) * (symtbl->capacity));
+  if(!new)
+    throw_error("Out of Memory");
 
-  return;
-}
-
-void expand_symtbl(symbol_tbl* symtbl)
-{
-  symtbl->allocated *= 2;
-  sym_t* new = malloc(sizeof(sym_t) * (symtbl->allocated));
-  for (int i = 0; i < symtbl->occupied; i++)
+  int i;
+  for (i= 0; i < symtbl->size; i++)
     new[i] = symtbl->sym[i];
-  for (int i = symtbl->occupied; i < symtbl->allocated; i++)
+  for (; i < symtbl->capacity; i++)
   {
-    new[i].byte_offset = 0;
-    new[i].label = NULL;
+    new[i].symbol = NULL;
     new[i].type = SYM_EMPTY;
+    new[i].byte_offset = 0;
   }
 
   free(symtbl->sym);
   symtbl->sym = new;
-}
-
-void allocate_symbol(const char* label, int byte_offset, symbol_tbl* symtbl)
-{
-  int sym_index;
-  for (sym_index = 0; sym_index < symtbl->occupied; sym_index++)
-  {
-    if (strcmp(symtbl->sym[sym_index].label, label))
-      continue;
-
-    throw_error("Double label");
-  }
-
-  int str_size;
-  for (str_size = 0; label[str_size]; str_size++)
-    ;
-  symtbl->sym[sym_index].label = malloc(str_size);
-
-  for (int i = 0; i < str_size; i++)
-    symtbl->sym[sym_index].label[i] = label[i];
-
-  symtbl->sym[sym_index].byte_offset = byte_offset;
-  symtbl->sym[sym_index].type = SYM_LABEL_ALLOCATED;
-
-  symtbl->occupied++;
-  if (symtbl->occupied >= symtbl->allocated)
-    expand_symtbl(symtbl);
 
   return;
 }
 
-uint32_t search_symbol(const char* label, symbol_tbl* symtbl)
+uint32_t alloc_symbol(const char* symbol, uint64_t val, symtbl_t* symtbl)
 {
-  uint32_t sym_index = 0;
-  while (symtbl->sym[sym_index].type != SYM_EMPTY)
-  {
-    if (strcmp(symtbl->sym[sym_index].label, label))
-    {
-      sym_index++;
-      continue;
-    }
+  uint32_t sym_index = search_symtbl(symbol, symtbl);
+  symbol_t sym = symtbl->sym[sym_index];
+  if (sym.type == SYM_ALLOCATED)
+    throw_error("Double symbol \"%s\"", sym.symbol);
 
-    return sym_index;
-  }
+  sym.symbol = strdup(symbol);
+  sym.type = SYM_ALLOCATED;
+  sym.byte_offset = val;  // val can be either uint64_t or char*
 
-  int str_size;
-  for (str_size = 0; label[str_size]; str_size++)
-    ;
-  symtbl->sym[sym_index].label = malloc(str_size);
+  symtbl->sym[sym_index] = sym;
 
-  for (int i = 0; i < str_size; i++)
-    symtbl->sym[sym_index].label[i] = label[i];
 
-  symtbl->sym[sym_index].byte_offset = 0;
-  symtbl->sym[sym_index].type = SYM_LABEL_EXPECTED;
+  // Never allow symtbl to become full
+  symtbl->size++;
+  if (symtbl->capacity >= symtbl->size)
+    expand_symtbl(symtbl->capacity * 2, symtbl);
 
-  symtbl->occupied++;
-  if (symtbl->occupied >= symtbl->allocated)
-    expand_symtbl(symtbl);
 
   return sym_index;
 }
 
-// We find a valid label
-  // Look through the symtbl
-  // Find an expected -> Overwrite allocated
-  // Find an empty -> Overwrite allocated
+uint32_t search_symtbl(const char* symbol, symtbl_t* symtbl)
+{
+  // Never fails since symtbl is always over-allocated.
+  uint32_t sym_index;
+  for (sym_index = 0; symtbl->sym[sym_index].type != SYM_EMPTY; sym_index++)
+  {
+    if (strcmp(symbol, symtbl->sym[sym_index].symbol) == 0)
+      return sym_index;
+  }
 
-// Parse Immediate (LABEL)
-  // Look through symtbl
-  // Find allocated -> Save index
-  // Find empty (none found)
-    // Save index
-    // Overwrite expected
+  //? Expect a forward reference (future-defined) symbol.
+  symbol_t* sym = &symtbl->sym[sym_index];
+  sym->symbol = strdup(symbol);
+  sym->type = SYM_EXPECTED;
+  sym->byte_offset = 0;   // Value must later be resolved before translation
 
-// During allocation / search
-  // If we ever reach the end, double size of array and transfer
+  // Never allow symtbl to become full
+  symtbl->size++;
+  if (symtbl->capacity >= symtbl->size)
+    expand_symtbl(symtbl->capacity * 2, symtbl);
 
-// During translation:
-  // If we ever encounter an "expected", then we throw error "Missing Label"
+  return sym_index;
+}

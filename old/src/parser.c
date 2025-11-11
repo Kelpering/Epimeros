@@ -25,6 +25,9 @@ void normalize_line(char* line, char* norm_buf)
     switch (c)
     {
       case ' ':
+      case '%':
+      case '(':
+      case ')':
       case ',':
       case '-':
       case '.':
@@ -146,7 +149,8 @@ void normalize_line(char* line, char* norm_buf)
   {
     char c = line[line_pos++];
     if (('a' <= c && c <= 'z') || ('0' <= c && c <= '9') || 
-        (c == '.') || (c == '_') || (c == '-'))
+        (c == '.') || (c == '_') || (c == '-') || 
+        (c == '%') || (c == '(') || (c == ')'))
     {
       if (whitespace && norm_buf[norm_pos-1] != ',')
         throw_error("Split token");

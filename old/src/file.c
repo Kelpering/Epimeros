@@ -36,9 +36,19 @@ void parse_file(FILE* file, parser_ctx* ctx)
     {
       next_node->next = temp;
       next_node = next_node->next;
+      byte_offset += temp->def->byte_size;
     }
   }
   instr_t* curr_instr = head->next;
+
+  // Check for unresolved references
+  uint32_t sym_index = 0;
+  while (ctx->symtbl->sym[sym_index].type != SYM_EMPTY)
+  {
+    if (ctx->symtbl->sym[sym_index].type == SYM_LABEL_EXPECTED)
+      throw_error("Unresolved label \"%s\"", ctx->symtbl->sym[sym_index].label);
+    sym_index++;
+  }
   
   while(curr_instr)
   {

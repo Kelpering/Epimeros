@@ -298,10 +298,9 @@ uint32_t I_TRANS(instr_t* instr, parser_ctx* ctx)
 
   int64_t imm = instr->op[2].val.i64;
   if (instr->op[2].type == MACRO)
-    imm = instr->op[2].val.macro_cb(imm, ctx);
+    imm = instr->op[2].macro_cb(imm, ctx);
 
-
-  if ((imm > (1<<11)-1) | (imm < -(1<<11)))
+  if ((imm > (1<<12)-1) | (imm < -(1<<11)))
     throw_error("Immediate Out of Range");
 
   bytecode |= (((imm & 0b00000000001) >> 0) << 20);
@@ -319,6 +318,9 @@ uint32_t S_TRANS(instr_t* instr, parser_ctx* ctx)
   bytecode |= instr->op[1].val.u64 << 20;
 
   int64_t imm = instr->op[2].val.i64;
+  if (instr->op[2].type == MACRO)
+    imm = instr->op[2].macro_cb(imm, ctx);
+
   if ((imm > (1<<11)-1) | (imm < -(1<<11)))
     throw_error("Immediate Out of Range");
 
@@ -337,6 +339,9 @@ uint32_t B_TRANS(instr_t* instr, parser_ctx* ctx)
   bytecode |= instr->op[1].val.u64 << 20;
 
   int64_t imm = instr->op[2].val.i64;
+  if (instr->op[2].type == MACRO)
+    imm = instr->op[2].macro_cb(imm, ctx);
+
   if (imm % 2)
     throw_error("Immediate Out of Alignment");
   if ((imm > (1<<12)-1) | (imm < -(1<<12)))
@@ -356,7 +361,10 @@ uint32_t U_TRANS(instr_t* instr, parser_ctx* ctx)
   bytecode |= instr->op[0].val.u64 << 7;
 
   int64_t imm = instr->op[1].val.i64;
-  if ((imm > (1L<<19)-1) | (imm < -(1L<<19)))
+  if (instr->op[1].type == MACRO)
+    imm = instr->op[1].macro_cb(imm, ctx);
+
+  if ((imm > (1L<<20)-1) | (imm < -(1L<<19)))
     throw_error("Immediate Out Of Range");
 
   bytecode |= (((imm & 0b0000000000011111111) >>  0) << 12);
@@ -372,6 +380,9 @@ uint32_t J_TRANS(instr_t* instr, parser_ctx* ctx)
   bytecode |= instr->op[0].val.u64 << 7;
 
   int64_t imm = instr->op[1].val.i64;
+  if (instr->op[1].type == MACRO)
+    imm = instr->op[1].macro_cb(imm, ctx);
+
   if (imm % (1<<1))
     throw_error("Immediate Out of Alignment");
   if ((imm > (1L<<20)-1) | (imm < -(1L<<20)))

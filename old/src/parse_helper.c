@@ -1,12 +1,19 @@
 #include "parse_helper.h"
 #include "error.h"
+#include "sysmacro.h"
 #include <stdlib.h>
 #include <string.h>
 
-parser_ctx* init_parserctx(instr_set* instr_sets[], reg_set* reg_sets[])
+#include <stdio.h>
+
+parser_ctx* init_parserctx(instr_set* instr_sets[], 
+  reg_set* reg_sets[], 
+  int offset
+)
 {
   parser_ctx* ctx = malloc(sizeof(parser_ctx));
   ctx->symtbl = init_symtbl();
+  ctx->starting_offset = offset;
 
   //? Parse instr_set
   int instr_set_count = 0;
@@ -126,10 +133,10 @@ void free_parserctx(parser_ctx* ctx)
   return;
 }
 
-char* extract_token(const char* line, int* str_index)
+char* extract_token(char c, const char* line, int* str_index)
 {
   int t = *str_index;
-  while (line[t] != ',' && line[t] != '\n' && line[t] != '\0')
+  while (line[t] != c && line[t] != '\n' && line[t] != '\0')
     t++;
   t++;
 
@@ -148,7 +155,7 @@ op_t parse_reg(const char* line, int* str_index, parser_ctx* ctx)
   if (line[*str_index] == ',')
     throw_error("Empty operand");
 
-  char* token = extract_token(line, str_index);
+  char* token = extract_token(',', line, str_index);
 
   int reg = -1;
   for (int i = 0; i < ctx->reg_count; i++)
@@ -180,7 +187,26 @@ op_t parse_imm_macro(const char* token, parser_ctx* ctx)
     .macro_cb = NULL
   };
 
-  
+  int str_index = 0;
+  char* macro = extract_token('(', token, &str_index);
+  char* label = extract_token(')', token, &str_index);
+
+  if (strcmp("%hi", macro) == 0){
+    op.val.i64 = search_symbol(label, ctx->symtbl);
+    op.macro_cb = macro_hi;
+  }
+  else if (strcmp("%lo", macro) == 0) {
+    op.val.i64 = search_symbol(label, ctx->symtbl);
+    op.macro_cb = macro_lo;
+  }
+  else if (strcmp("%pcrel_hi", macro) == 0) {
+    op.val.i64 = search_symbol(label, ctx->symtbl);
+    op.macro_cb = macro_pcrel_hi;
+  }
+  else if (strcmp("%pcrel_lo", macro) == 0) {
+    op.val.i64 = search_symbol(label, ctx->symtbl);
+    op.macro_cb = macro_pcrel_lo;
+  }
 
   return op;
 }
@@ -190,10 +216,10 @@ op_t parse_imm(const char* line, int* str_index, parser_ctx* ctx)
   if (line[*str_index] == ',')
     throw_error("Empty Operand");
 
-  char* token = extract_token(line, str_index);
+  char* token = extract_token(',', line, str_index);
 
   if (token[0] == '%')
-    return parse_label_macro(token, ctx);
+    return parse_imm_macro(token, ctx);
 
   op_t op = 
   {

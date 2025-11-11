@@ -1,3 +1,6 @@
-#? COMMENTS GALORE
+#!terst
 
-jalr x1, x0, 0
+%TESTMACRO(x1, %TEST, x3)
+
+.macro
+x   , x2, x3)
