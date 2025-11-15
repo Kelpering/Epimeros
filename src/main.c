@@ -4,7 +4,6 @@
 #include <string.h>
 #include "private/preprocessor.h"
 #include "private/error.h"
-#include "private/parsing.h"
 
 //! OPERAND TYPES:
   //! Register: explanatory
@@ -31,6 +30,6 @@ int main(int argc, char** argv)
 
   preprocess_file(argv[1], filename_buf);
 
-  remove(filename_buf);
+  // remove(filename_buf);
   return 0;
 }

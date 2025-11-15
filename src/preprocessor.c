@@ -30,7 +30,7 @@ macro_t* alloc_macro(
 {
   // Validate str_replace
   int str_pos = 0;
-  while(str_replace[str_pos])  
+  while(str_replace[str_pos])
   {
     if (str_replace[str_pos] != '$')
     {
@@ -38,7 +38,15 @@ macro_t* alloc_macro(
       continue;
     }
     
+    // Correct over-extraction
+    int pos_save = str_pos;
     char* op = extract_token(str_replace, &str_pos);
+    int tmp = 1;
+    while ('0' <= op[tmp] && op[tmp] <= '9')
+      tmp++;
+    op[tmp] = '\0';
+    str_pos = pos_save + tmp;
+
     int64_t param_num = parse_int64_t(&op[1]);
 
     if (param_num <= 0 || param_num > param_count)
@@ -50,9 +58,13 @@ macro_t* alloc_macro(
   // Expect an allocated but undefined macro at the end of the list.
   macro_t* curr = head;
   while (curr->macro != NULL)
+  {
+    if (strcmp(curr->macro, macro) == 0)
+      throw_error("Duplicate macro definition");
     curr = curr->next;
+  }
 
-  curr->macro = strdup(macro);
+  curr->macro = strdup(macro); 
   curr->str_replace = strdup(str_replace);
   curr->param_count = param_count;
   curr->next = malloc(sizeof(macro_t));
@@ -92,7 +104,7 @@ int expand_macro(const char* line, macro_t* head, FILE* dst_file, int lvl)
     throw_error("Malformed macro \"%s\"", extract_token(line, &line_pos));
   }
   
-  macro_t* macro_def = search_macro(macro, head);
+  macro_t* macro_def = search_macro(&macro[1], head);
   if (macro_def == NULL)
     throw_error("Undefined macro \"%s\"", macro);
 
@@ -105,7 +117,13 @@ int expand_macro(const char* line, macro_t* head, FILE* dst_file, int lvl)
   // Parse all macro_args (including 0)
   char** macro_args = malloc(sizeof(char*) * macro_def->param_count);
   for (int i = 0; i < macro_def->param_count; i++)
+  {
     macro_args[i] = extract_operand_strict(line, &line_pos);
+    line_pos++;
+    if (macro_args[i][0] == '%')
+      throw_error("Macro argument forbidden");
+  }
+  line_pos--;
   if (macro_def->param_count && extract_operand(line, &line_pos))
     throw_error("Excess operand");
 
@@ -118,13 +136,19 @@ int expand_macro(const char* line, macro_t* head, FILE* dst_file, int lvl)
     switch (macro_def->str_replace[i]) 
     {
       case '$':
-        // Skip '$', then don't skip the parsed token char.
-        i++;
+        // Correct over-extraction
+        int i_save = i;
         char* token = extract_token(macro_def->str_replace, &i);
-        i--;
+        int tmp = 1;
+        while ('0' <= token[tmp] && token[tmp] <= '9')
+          tmp++;
+        token[tmp] = '\0';
+        i = i_save + tmp;
+        i--;  // for loop i++ must be accounted for.
 
         // Macro '$x' tokens are validated inside directive/alloc_macro
-        fputs(macro_args[parse_uint64_t(token) - 1], dst_file);
+        fputs(macro_args[parse_uint64_t(&token[1]) - 1], dst_file);
+
         break;
 
       case '%':
@@ -137,12 +161,7 @@ int expand_macro(const char* line, macro_t* head, FILE* dst_file, int lvl)
     }
   }
 
-  for (int i = 0; i < macro_def->param_count; i++)
-  {
-    printf("TEST PARAM: \"%s\"\n", macro_args[i]);
-  }
-
-  return line_pos;
+  return line_pos + 1;
 }
 
 
@@ -324,8 +343,6 @@ FILE* preprocess_file(const char* path, const char* path_processed)
   //? Primary loop
   char line_buf[100];
   macro_t* macro_head = malloc(sizeof(macro_t));
-  alloc_macro("%TEST", "YEST", 0, macro_head);
-  alloc_macro("%TESTMACRO", "THIS %TEST IS A TEST\n $1 $2 $3\n", 3, macro_head);
   while (fgets(line_buf, sizeof(line_buf), src_file))
   {
     // Increment global line_num (for error handling)

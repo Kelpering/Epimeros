@@ -8,33 +8,40 @@ char skip_whitespace(const char* str, int* index)
   while (str[*index] == ' ')
     (*index)++;
 
-  // Treat '\n' as a termination char (like '\0')
-  char c = str[*index];
-  if (c == '\n')
-    c = '\0';
+  // Treat all delimiters as a termination char (like '\0')
+  switch (str[*index]) 
+  {
+    case '\n':
+    case '#':
+      return '\0';
+  }
 
-  return c;
+  return str[*index];
 }
 
 char skip_until(char delim, const char* str, int* index)
 {
-  while (str[*index] != delim && str[*index] != '\n' && str[*index] != '\0')
+  while (str[*index] != delim && str[*index] != '\n' && 
+         str[*index] != '\0' && str[*index] != '#') {
     (*index)++;
+  }
 
-  // Treat '\n' as a termination char (like '\0')
-  char c = str[*index];
-  if (c == '\n')
-    c = '\0';
+  // Treat all delimiters as a termination char (like '\0')
+  switch (str[*index]) 
+  {
+    case '\n':
+    case '#':
+      return '\0';
+  }
 
-  return c;
+  return str[*index];
 }
 
 char* extract_delim(char delim, const char* str, int* index)
 {
   int t = *index;
-  while (str[t] != delim && str[t] != '\n' && str[t] != '\0') {
+  while (str[t] != delim && str[t] != '\n' && str[t] != '\0' && str[t] != '#')
     t++;
-  }
   
   int token_size = t - *index;
   char* token = malloc(token_size + 1);
@@ -49,7 +56,7 @@ char* extract_delim(char delim, const char* str, int* index)
 char* extract_token(const char* str, int* index)
 {
   int t = *index;
-  while (str[t] != ' ' && str[t] != '\n' && str[t] != '\0')
+  while (str[t] != ' ' && str[t] != '\n' && str[t] != '\0' && str[t] != '#')
     t++;
   
   int token_size = t - *index;
@@ -70,7 +77,8 @@ char* extract_operand(const char* str, int* index)
   skip_whitespace(str, index);
   int t = *index;
   int excess_whitespace = 0;
-  while (str[t] != ')' && str[t] != ',' && str[t] != '\n' && str[t] != '\0')
+  while (str[t] != ')' && str[t] != ',' && str[t] != '\n' && 
+         str[t] != '\0' && str[t] != '#')
   {
     if (str[t] == ' ')
     {
@@ -95,9 +103,7 @@ char* extract_operand(const char* str, int* index)
   for (int i = 0; i < token_size; i++)
     token[i] = str[(*index)++];
   token[token_size] = '\0';
-  *index += excess_whitespace + 1;
-
-  
+  *index += excess_whitespace;
 
   return token;
 }
