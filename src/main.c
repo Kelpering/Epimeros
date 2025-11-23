@@ -4,6 +4,11 @@
 #include <string.h>
 #include "private/preprocessor.h"
 #include "private/error.h"
+#include "private/parser.h"
+#include "instr_set/RV32I.h"
+#include "private/translation.h"
+
+// #include "../old/include/"
 
 //! OPERAND TYPES:
   //! Register: explanatory
@@ -18,18 +23,36 @@ int main(int argc, char** argv)
   if (argc != 2)
     throw_error("Incorrect number of arguments.\nExpected: 2; Provided: %d", 0, argc);
 
-  char* filename_buf = malloc(strlen(argv[1])+2);
-  int i;
-  for (i = 0; argv[1][i]; i++)
-    filename_buf[i] = argv[1][i];
-  filename_buf[i++] = '.';
-  filename_buf[i++] = 'S';
-  filename_buf[i++] = '\0';
+  char* filename_buf = calloc(strlen(argv[1]) + 3, 1);
+  if (!filename_buf)
+    throw_error("OoM");
+  strcat(filename_buf, argv[1]);
+  strcat(filename_buf, ".S");
 
-  printf("New: %s\n", filename_buf);
+  FILE* processed_file = preprocess_file(argv[1], filename_buf);
+  free(filename_buf);
 
-  preprocess_file(argv[1], filename_buf);
+  parser_ctx* ctx = init_parserctx(0, 1, RV32I);
 
+  instr_t* instr_list = parse_file(processed_file, ctx);
+  temp_trans(instr_list, ctx);
+
+  // Boilerplate free structure
+  while(instr_list->next)
+  {
+    instr_t* temp = instr_list->next;
+    for (int i = 0; i < instr_list->instr_def->op_count; i++)
+      free(instr_list->op[i]);
+    free(instr_list);
+    instr_list = temp;
+  }
+  for (int i = 0; i < instr_list->instr_def->op_count; i++)
+    free(instr_list->op[i]);
+  free(instr_list);
+  free_parserctx(ctx);
+  
+  
+  fclose(processed_file);
   // remove(filename_buf);
   return 0;
 }

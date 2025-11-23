@@ -1,11 +1,28 @@
 #include "private/preprocessor.h"
 #include "private/error.h"
-#include "private/parsing.h"
+#include "private/str_parsing.h"
 #include "private/directive.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+//^ If we lean into the recursive nature of expand_macro
+  //^ (using either a global or additional recurse_level variable)
+//^ we might be able to improve the garbage code in macro processing
+
+macro_t* init_macrolist()
+{
+  macro_t* macro_head = calloc(sizeof(macro_t), 1);
+
+  // Creates special macros that are skipped
+  alloc_macro("hi", NULL, -1, macro_head);
+  alloc_macro("lo", NULL, -1, macro_head);
+  alloc_macro("pcrel_hi", NULL, -1, macro_head);
+  alloc_macro("pcrel_lo", NULL, -1, macro_head);
+
+  return macro_head;
+}
 
 macro_t* search_macro(const char* macro, macro_t* head)
 {
@@ -28,6 +45,19 @@ macro_t* alloc_macro(
   macro_t* head
 )
 {
+  // Expect an allocated but undefined macro at the end of the list.
+  macro_t* curr = head;
+  while (curr->macro != NULL)
+  {
+    if (strcmp(curr->macro, macro) == 0)
+      throw_error("Duplicate macro definition");
+    curr = curr->next;
+  }
+
+  // Handle sysmacro
+  if (param_count == -1)
+    goto sysmacro_skip;
+
   // Validate str_replace
   int str_pos = 0;
   while(str_replace[str_pos])
@@ -54,20 +84,12 @@ macro_t* alloc_macro(
     
     free(op);
   }
-
-  // Expect an allocated but undefined macro at the end of the list.
-  macro_t* curr = head;
-  while (curr->macro != NULL)
-  {
-    if (strcmp(curr->macro, macro) == 0)
-      throw_error("Duplicate macro definition");
-    curr = curr->next;
-  }
-
-  curr->macro = strdup(macro); 
+  
   curr->str_replace = strdup(str_replace);
+  sysmacro_skip:
+  curr->macro = strdup(macro); 
   curr->param_count = param_count;
-  curr->next = malloc(sizeof(macro_t));
+  curr->next = calloc(sizeof(macro_t), 1);
 
   return curr;
 }
@@ -107,6 +129,21 @@ int expand_macro(const char* line, macro_t* head, FILE* dst_file, int lvl)
   macro_t* macro_def = search_macro(&macro[1], head);
   if (macro_def == NULL)
     throw_error("Undefined macro \"%s\"", macro);
+  free(macro);
+
+  // Handle sysmacro
+  if (macro_def->param_count == -1)
+  {
+    char* temp = extract_delim(')', line, &line_pos);
+    if (line[line_pos] != ')')
+      throw_error("Malformed macro");
+    fputc('%', dst_file);
+    fputs(macro_def->macro, dst_file);
+    fputc('(', dst_file);
+    fputs(temp, dst_file);
+    free(temp);
+    return line_pos;
+  }
 
   // Handle function params
   if (!func_macro && macro_def->param_count > 0)
@@ -148,6 +185,7 @@ int expand_macro(const char* line, macro_t* head, FILE* dst_file, int lvl)
 
         // Macro '$x' tokens are validated inside directive/alloc_macro
         fputs(macro_args[parse_uint64_t(&token[1]) - 1], dst_file);
+        free(token);
 
         break;
 
@@ -161,171 +199,13 @@ int expand_macro(const char* line, macro_t* head, FILE* dst_file, int lvl)
     }
   }
 
+  for (int i = 0; i < macro_def->param_count; i++)
+    free(macro_args[i]);
+  free(macro_args);
+    
   return line_pos + 1;
 }
 
-
-
-
-// 
-// void macro_directive(
-//   char* line_buf, 
-//   symtbl_t* macro_symtbl, 
-//   FILE* src_file, 
-//   FILE* dst_file
-// )
-// {
-//   int line_pos = 0;
-//   skip_whitespace(line_buf, &line_pos);
-//   char* macro_name = extract_token(line_buf, &line_pos);
-// 
-//   // If there are excess chars to process on this line, throw error.
-//   if (skip_whitespace(line_buf, &line_pos))
-//     throw_error("Excess directive operands");
-// 
-//   //! Does not handle commas
-//     //^ extract_term_token (' ', ',', '\n', '\0')
-//   //! Function macros
-//     //^ Skip whitespace
-//   //! 
-// 
-//   int macro_pos = 0;
-//   char macro_buf[1000] = {0};
-//   char tmp_buf[100];
-//   while (fgets(tmp_buf, sizeof(tmp_buf), src_file))
-//   {
-//     line_num++;
-//     
-//     // Check tmp_buf size and overflow
-//     int tmp_size = 0;
-//     while (tmp_buf[tmp_size])
-//       tmp_size++;
-//     if (tmp_buf[tmp_size-1] != '\n' && !feof(src_file))
-//       throw_error("Line buffer overflow");
-// 
-//     // Check for directive
-//     int line_pos = 0;
-//     if (skip_whitespace(line_buf, &line_pos) == '.')
-//     {
-//       char* tok = extract_token(tmp_buf, &line_pos);
-// 
-//       if (strcmp(".macro", tok) == 0)
-//         throw_error("Recursive \".macro\" directive");
-//       if (strcmp(".endm", tok) != 0)
-//       {
-//         free(tok);
-//         goto skip_directive;
-//       }
-//       free(tok);
-// 
-//       // Overwrite final '\n'
-//       macro_buf[macro_pos - 1] = '\0';
-//       
-//       alloc_symbol(macro_name, (uint64_t)strdup(macro_buf), macro_symtbl);
-//       return;
-//     }
-//     skip_directive:
-//     
-//     if (tmp_size + macro_pos + 1 > 1000)
-//       throw_error("Macro buffer overflow");
-//     
-//     // Append tmp_buf to macro_buf (including '\n')
-//     for (int i = 0; i < tmp_size; i++)
-//       macro_buf[macro_pos++] = tmp_buf[i];
-//   }
-//   throw_error("Unmatched \".macro\" directive");
-// 
-//   return;
-// }
-// 
-// void expand_macro(const char* line, symtbl_t* macro_symtbl, FILE* dst_file)
-// {
-//   printf("line: \"%s\"", line);
-// 
-//   throw_error("END EXECUTION");
-// 
-//   const char* macro = 0;
-// 
-//   uint32_t sym_index = search_symtbl(macro, macro_symtbl);
-// 
-//   if (macro_symtbl->sym[sym_index].type != SYM_ALLOCATED)
-//     throw_error("Undefined macro \"%%%s\"", macro);
-// 
-//   int i = 0;
-//   while(macro_symtbl->sym[sym_index].val.str_ptr[i])
-//   {
-//     if (macro_symtbl->sym[sym_index].val.str_ptr[i] == '%')
-//     {
-// 
-//       continue;
-//     }
-// 
-//     fputc(macro_symtbl->sym[sym_index].val.str_ptr[i], dst_file);
-//   }
-// 
-//   // fputs(, dst_file);
-// }
-// 
-// void process_user_macros(FILE* src_file, FILE* dst_file)
-// {
-//   // We use macro_symtbl to collect macro definitions. Since macros must be
-//   // pre-defined before use, we can throw error on SYM_EXPECTED.
-//   symtbl_t* macro_symtbl = init_symtbl();
-//   //* Create macro table
-//   //* Macros must be predefined before use
-//   //* Read line by line
-//   //* Processing within function
-//   //! Macros must be resolved per operand, not per symbol
-// 
-//   char line_buf[100];
-//   while (fgets(line_buf, sizeof(line_buf), src_file))
-//   {
-//     line_num++;
-// 
-//     // Detect line buffer overflow
-//     int len = 0;
-//     while (line_buf[len++]);
-//     len--;
-//     if (line_buf[len-1] != '\n' && !feof(src_file))
-//       throw_error("Line buffer overflow");
-// 
-//     // Check for directive
-//     int line_pos = 0;
-//     if (skip_whitespace(line_buf, &line_pos) == '.')
-//     {
-//       char* tok = extract_token(line_buf, &line_pos);
-//       if (line_buf[line_pos] != ' ')
-//         throw_error("Malformed .macro directive");
-// 
-//       if (strcmp(".endm", tok) == 0)
-//         throw_error("Unmatched \".endm\" directive");
-//       if (strcmp(".macro", tok) != 0)
-//       {
-//         free(tok);
-//         goto skip_directive;
-//       }
-// 
-//       macro_directive(&line_buf[line_pos], macro_symtbl, src_file, dst_file);
-//       continue;
-//     }
-//     skip_directive:
-//     
-//     // Parse line for user macros
-//     while(line_buf[line_pos])
-//     {
-//       if (line_buf[line_pos] != '%')
-//       {
-//         fputc(line_buf[line_pos++], dst_file);
-//         continue;
-//       }
-// 
-//       expand_macro(&line_buf[line_pos++], macro_symtbl, dst_file);
-//     }
-//   }
-// 
-//   return;
-// }
-// 
 FILE* preprocess_file(const char* path, const char* path_processed)
 {
   //! Temporary comment (Will destroy file)
@@ -336,13 +216,13 @@ FILE* preprocess_file(const char* path, const char* path_processed)
   if (src_file == NULL)
     throw_error("Cannot open \"%s\"", src_file);
 
-  FILE* dst_file = fopen(path_processed, "w");
+  FILE* dst_file = fopen(path_processed, "w+");
   if (dst_file == NULL)
     throw_error("Cannot open \"%s\"", dst_file);
 
   //? Primary loop
   char line_buf[100];
-  macro_t* macro_head = malloc(sizeof(macro_t));
+  macro_t* macro_head = init_macrolist();
   while (fgets(line_buf, sizeof(line_buf), src_file))
   {
     // Increment global line_num (for error handling)
@@ -390,10 +270,20 @@ FILE* preprocess_file(const char* path, const char* path_processed)
 
       line_pos += expand_macro(&line_buf[line_pos], macro_head, dst_file, 0);
     }
-
-
   }
 
+  while (macro_head->next)
+  {
+    free(macro_head->macro);
+    free(macro_head->str_replace);
+    
+    macro_t* temp = macro_head->next;
+    free(macro_head);
+    macro_head = temp;
+  }
+  free(macro_head);
+
+  
   fclose(src_file);
   rewind(dst_file);
   return dst_file;

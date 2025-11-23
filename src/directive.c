@@ -1,6 +1,6 @@
 #include "private/directive.h"
 #include "private/error.h"
-#include "private/parsing.h"
+#include "private/str_parsing.h"
 #include "private/preprocessor.h"
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +26,7 @@ void directive_macro(
     param_count = 0;
   else
     param_count = parse_uint64_t(param_token);
+  free(param_token);
 
   char c = skip_whitespace(line, &line_pos);
   if (c != '\0' && c != '#')
@@ -74,6 +75,7 @@ void directive_macro(
           throw_error("Excess operands");
         macro_buf[macro_pos - 1] = '\0';   // Remove final '\n'
         alloc_macro(macro_name, macro_buf, param_count, head);
+        free(macro_name);
         return;
     }
 
@@ -94,7 +96,12 @@ void preprocessor_directive(
   char* directive = extract_delim(' ', line, &line_pos);
 
   if (strcmp(directive, ".macro") == 0)
-    return directive_macro(&line[line_pos], src_file, dst_file, head);
+  {
+    free(directive);
+    directive_macro(&line[line_pos], src_file, dst_file, head);
+    return;
+  }
+
   if (strcmp(directive, ".endm") == 0)
     throw_error("Unmatched .endm directive");
 

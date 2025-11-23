@@ -1,16 +1,16 @@
-#!terst
-#! Fix these three comment errors
-  #^ We might want a function to declare 
-.macro TEST 1 #test
-Y a$1$1a EST #test
-.endm #test
-# TEST
-.macro TESTMACRO 3
-x
-THIS%TEST(xba)IS A TEST
-x
- $1 $2 $3
-x
-.endm
+labl:
+ 
+ecall
+jal x1, -78912
+beq x1, x2, 4
+sb x1, x2, 2047
+jalr x1, x31, 2047
+add x1, x2, x3
+    lui x1, %lo(lalbalalbal)
+  lui x1, %hi(lalbalalbal)
+      # lui x1, %pcrel_hi(labl)
+      #   lui x1, %pcrel_lo(labl)
 
-a%TESTMACRO(x1, TEST, x3)a 
+
+lalbalalbal: AddI x1, x1, 23
+# 

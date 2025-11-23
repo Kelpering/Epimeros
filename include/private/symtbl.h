@@ -25,7 +25,9 @@ typedef struct symtbl_t
 } symtbl_t;
 
 symtbl_t* init_symtbl();
-uint32_t alloc_symbol(const char* symbol, uint64_t val, symtbl_t* symtbl);
-uint32_t search_symtbl(const char* symbol, symtbl_t* symtbl);
+void free_symtbl(symtbl_t* symtbl);
+symbol_t* alloc_symbol(const char* symbol, uint64_t val, symtbl_t* symtbl);
+symbol_t* search_symtbl(const char* symbol, symtbl_t* symtbl);
+symbol_t* search_symtbl_strict(const char* symbol, symtbl_t* symtbl);
 
 #endif // __EPIMEROS_PRIVATE_SYMTBL_H__
