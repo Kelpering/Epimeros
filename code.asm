@@ -1,16 +1,10 @@
-labl:
- 
-ecall
-jal x1, -78912
-beq x1, x2, 4
-sb x1, x2, 2047
-jalr x1, x31, 2047
-add x1, x2, x3
-    lui x1, %lo(lalbalalbal)
-  lui x1, %hi(lalbalalbal)
-      # lui x1, %pcrel_hi(labl)
-      #   lui x1, %pcrel_lo(labl)
+# Load immediate test
 
+# .equ TEST 4214
+# This could just set a symbol with the "byte_offset" == 4214
 
-lalbalalbal: AddI x1, x1, 23
-# 
+fence iO, wori
+# addi    x1, %lo(4286)
+
+# Lui:    x1 <- (18<<12)
+# Addi:   x1 += -2044

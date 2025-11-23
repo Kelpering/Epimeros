@@ -18,10 +18,11 @@ int64_t parse_imm(char* imm, parser_ctx* ctx);
 int64_t parse_sysmacro(char* str, parser_ctx* ctx);
 uint32_t process_bit_range(int64_t value, int bitsize, bool sign);
 
-// int8_t numeral_def[] = {}
-// numeral_def['a'] == 10 // Valid, integer 10
-// numeral_def[')'] == -1 // Invalid, -1
-// parse_base_int (selected base is input, number string is defined, checks chars)
-// parse_int (any number, detected by 0b, 0x, 0o, etc)
+//^ extract_param vs extract_operand
+//^ Operand is termchar = ','; skip (parenthesis enclosed params)
+//^ param is termchar = ',' & ')'; Should only be used in functions like %hi()
+//^ Maybe an "offset(reg)" extractor too?
+//^ Could work if we counted params
+//^ It would also be MUCH easier if we just defaulted to using it.
 
 #endif // __EPIMEROS_PRIVATE_PARSING_H__

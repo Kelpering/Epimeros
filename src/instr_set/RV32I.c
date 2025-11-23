@@ -101,9 +101,86 @@ uint32_t j_trans(instr_t* instr, parser_ctx* ctx)
 
 uint32_t fence_trans(instr_t* instr, parser_ctx* ctx)
 {
-  throw_error("FENCE UNIMP");
   uint32_t bytecode = instr->instr_def->opcode;
-  printf("Bytecode: 0x%x\n", bytecode);
+
+  uint8_t flag_pred = 0;
+  for (int i = 0; instr->op[0][i]; i++)
+  {
+    switch (instr->op[0][i]) 
+    {
+      case 'I':
+      case 'i':
+        if (flag_pred & 0b1000)
+          throw_error("Duplicate fence flag");
+        flag_pred |= 0b1000;
+        break;
+
+      case 'O':
+      case 'o':
+        if (flag_pred & 0b0100)
+          throw_error("Duplicate fence flag");
+        flag_pred |= 0b0100;
+        break;
+      
+      case 'R':
+      case 'r':
+        if (flag_pred & 0b0010)
+          throw_error("Duplicate fence flag");
+        flag_pred |= 0b0010;
+        break;
+
+      case 'W':
+      case 'w':
+        if (flag_pred & 0b0001)
+          throw_error("Duplicate fence flag");
+        flag_pred |= 0b0001;
+        break;
+
+      default:
+        throw_error("Unknown flag in fence");
+    }
+  }
+
+  uint8_t flag_succ = 0;
+  for (int i = 0; instr->op[1][i]; i++)
+  {
+    switch (instr->op[1][i]) 
+    {
+      case 'I':
+      case 'i':
+        if (flag_succ & 0b1000)
+          throw_error("Duplicate fence flag");
+        flag_succ |= 0b1000;
+        break;
+
+      case 'O':
+      case 'o':
+        if (flag_succ & 0b0100)
+          throw_error("Duplicate fence flag");
+        flag_succ |= 0b0100;
+        break;
+      
+      case 'R':
+      case 'r':
+        if (flag_succ & 0b0010)
+          throw_error("Duplicate fence flag");
+        flag_succ |= 0b0010;
+        break;
+
+      case 'W':
+      case 'w':
+        if (flag_succ & 0b0001)
+          throw_error("Duplicate fence flag");
+        flag_succ |= 0b0001;
+        break;
+
+      default:
+        throw_error("Unknown flag in fence");
+    }
+  }
+
+  bytecode |= flag_succ << 20;
+  bytecode |= flag_pred << 24;
 
   return bytecode;
 }
@@ -116,46 +193,46 @@ uint32_t no_trans(instr_t* instr, parser_ctx* ctx)
 
 static instr_def instr_array[] = 
 {
-  {"lui",    0b00000000000000000000000000110111, 4, 2, u_trans}, 
-  {"auipc",  0b00000000000000000000000000010111, 4, 2, u_trans},
-  {"jal",    0b00000000000000000000000001101111, 4, 2, j_trans},
-  {"jalr",   0b00000000000000000000000001100111, 4, 3, i_trans},
-  {"beq",    0b00000000000000000000000001100011, 4, 3, b_trans},
-  {"bne",    0b00000000000000000001000001100011, 4, 3, b_trans},
-  {"blt",    0b00000000000000000100000001100011, 4, 3, b_trans},
-  {"bge",    0b00000000000000000101000001100011, 4, 3, b_trans},
-  {"bltu",   0b00000000000000000110000001100011, 4, 3, b_trans},
-  {"bgeu",   0b00000000000000000111000001100011, 4, 3, b_trans},
-  {"lb",     0b00000000000000000000000000000011, 4, 3, i_trans},
-  {"lh",     0b00000000000000000001000000000011, 4, 3, i_trans},
-  {"lw",     0b00000000000000000010000000000011, 4, 3, i_trans},
-  {"lbu",    0b00000000000000000100000000000011, 4, 3, i_trans},
-  {"lhu",    0b00000000000000000101000000000011, 4, 3, i_trans},
-  {"sb",     0b00000000000000000000000000100011, 4, 3, s_trans},
-  {"sh",     0b00000000000000000001000000100011, 4, 3, s_trans},
-  {"sw",     0b00000000000000000010000000100011, 4, 3, s_trans},
-  {"addi",   0b00000000000000000000000000010011, 4, 3, i_trans},
-  {"slti",   0b00000000000000000010000000010011, 4, 3, i_trans},
-  {"sltiu",  0b00000000000000000011000000010011, 4, 3, i_trans},
-  {"xori",   0b00000000000000000100000000010011, 4, 3, i_trans},
-  {"ori",    0b00000000000000000110000000010011, 4, 3, i_trans},
-  {"andi",   0b00000000000000000111000000010011, 4, 3, i_trans},
-  {"slli",   0b00000000000000000001000000010011, 4, 3, r_trans},
-  {"srli",   0b00000000000000000101000000010011, 4, 3, r_trans},
-  {"srai",   0b01000000000000000101000000010011, 4, 3, r_trans},
-  {"add",    0b00000000000000000000000000110011, 4, 3, r_trans},
-  {"sub",    0b01000000000000000000000000110011, 4, 3, r_trans},
-  {"sll",    0b00000000000000000001000000110011, 4, 3, r_trans},
-  {"slt",    0b00000000000000000010000000110011, 4, 3, r_trans},
-  {"sltu",   0b00000000000000000011000000110011, 4, 3, r_trans},
-  {"xor",    0b00000000000000000100000000110011, 4, 3, r_trans},
-  {"srl",    0b00000000000000000101000000110011, 4, 3, r_trans},
-  {"sra",    0b01000000000000000101000000110011, 4, 3, r_trans},
-  {"or",     0b00000000000000000110000000110011, 4, 3, r_trans},
-  {"and",    0b00000000000000000111000000110011, 4, 3, r_trans},
+  {"lui",    0b00000000000000000000000000110111, 4, 2,     u_trans}, 
+  {"auipc",  0b00000000000000000000000000010111, 4, 2,     u_trans},
+  {"jal",    0b00000000000000000000000001101111, 4, 2,     j_trans},
+  {"jalr",   0b00000000000000000000000001100111, 4, 3,     i_trans},
+  {"beq",    0b00000000000000000000000001100011, 4, 3,     b_trans},
+  {"bne",    0b00000000000000000001000001100011, 4, 3,     b_trans},
+  {"blt",    0b00000000000000000100000001100011, 4, 3,     b_trans},
+  {"bge",    0b00000000000000000101000001100011, 4, 3,     b_trans},
+  {"bltu",   0b00000000000000000110000001100011, 4, 3,     b_trans},
+  {"bgeu",   0b00000000000000000111000001100011, 4, 3,     b_trans},
+  {"lb",     0b00000000000000000000000000000011, 4, 3,     i_trans},
+  {"lh",     0b00000000000000000001000000000011, 4, 3,     i_trans},
+  {"lw",     0b00000000000000000010000000000011, 4, 3,     i_trans},
+  {"lbu",    0b00000000000000000100000000000011, 4, 3,     i_trans},
+  {"lhu",    0b00000000000000000101000000000011, 4, 3,     i_trans},
+  {"sb",     0b00000000000000000000000000100011, 4, 3,     s_trans},
+  {"sh",     0b00000000000000000001000000100011, 4, 3,     s_trans},
+  {"sw",     0b00000000000000000010000000100011, 4, 3,     s_trans},
+  {"addi",   0b00000000000000000000000000010011, 4, 3,     i_trans},
+  {"slti",   0b00000000000000000010000000010011, 4, 3,     i_trans},
+  {"sltiu",  0b00000000000000000011000000010011, 4, 3,     i_trans},
+  {"xori",   0b00000000000000000100000000010011, 4, 3,     i_trans},
+  {"ori",    0b00000000000000000110000000010011, 4, 3,     i_trans},
+  {"andi",   0b00000000000000000111000000010011, 4, 3,     i_trans},
+  {"slli",   0b00000000000000000001000000010011, 4, 3,     r_trans},
+  {"srli",   0b00000000000000000101000000010011, 4, 3,     r_trans},
+  {"srai",   0b01000000000000000101000000010011, 4, 3,     r_trans},
+  {"add",    0b00000000000000000000000000110011, 4, 3,     r_trans},
+  {"sub",    0b01000000000000000000000000110011, 4, 3,     r_trans},
+  {"sll",    0b00000000000000000001000000110011, 4, 3,     r_trans},
+  {"slt",    0b00000000000000000010000000110011, 4, 3,     r_trans},
+  {"sltu",   0b00000000000000000011000000110011, 4, 3,     r_trans},
+  {"xor",    0b00000000000000000100000000110011, 4, 3,     r_trans},
+  {"srl",    0b00000000000000000101000000110011, 4, 3,     r_trans},
+  {"sra",    0b01000000000000000101000000110011, 4, 3,     r_trans},
+  {"or",     0b00000000000000000110000000110011, 4, 3,     r_trans},
+  {"and",    0b00000000000000000111000000110011, 4, 3,     r_trans},
   {"fence",  0b00000000000000000000000000001111, 4, 2, fence_trans}, 
-  {"ecall",  0b00000000000000000000000001110011, 4, 0, no_trans},
-  {"ebreak", 0b00000000000100000000000001110011, 4, 0, no_trans},
+  {"ecall",  0b00000000000000000000000001110011, 4, 0,    no_trans},
+  {"ebreak", 0b00000000000100000000000001110011, 4, 0,    no_trans},
 };
 
 static reg_def reg_array[] = 
@@ -234,5 +311,5 @@ instr_set RV32I =
   instr_array,
   sizeof(instr_array)/sizeof(instr_def),
   reg_array,
-  sizeof(reg_array)/sizeof(reg_def),
+  sizeof(reg_array)/sizeof(reg_def)
 };

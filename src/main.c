@@ -10,13 +10,21 @@
 
 // #include "../old/include/"
 
-//! OPERAND TYPES:
-  //! Register: explanatory
-  //! Immediate: Any explicitly-declared constant (including user macro)
-  //! Label: Used to resolve forward-reference problems (mostly for pseudo-ops)
-    //! Ex: j, li
-  //! Macro: Used to resolve label problems (most instr. use partial label imm.)
-    //! Ex: lui, auipc
+//^ TODO
+  //^ Likely will rewrite macro handling to be nicer and more recursive
+  //^ Likely rewrite a lot of parser/str_parsing to clean code and fix bugs
+    //^ Most of the string parsing is garbage that can be improved drastically
+  //^ Write documentation comments for all public functions (and select private)
+  //^ Add pseudo instructions like RV32I
+  //^ Add a few more directives (like .equ)
+    //^ .equ could totally be a symbol
+  //^ Rewrite majority of project to be more internally consistent and logical
+    //^ Return pointer instead of array index
+    //^ Use ctx more (esp symtbl)
+    //^ Improve naming
+    //^ Improve parsing
+    //^ Create consistent parsing rules to remove confusion
+  //^ Finish sysmacro translation
 
 int main(int argc, char** argv)
 {
@@ -30,7 +38,6 @@ int main(int argc, char** argv)
   strcat(filename_buf, ".S");
 
   FILE* processed_file = preprocess_file(argv[1], filename_buf);
-  free(filename_buf);
 
   parser_ctx* ctx = init_parserctx(0, 1, RV32I);
 
@@ -51,8 +58,8 @@ int main(int argc, char** argv)
   free(instr_list);
   free_parserctx(ctx);
   
-  
   fclose(processed_file);
-  // remove(filename_buf);
+  remove(filename_buf);
+  free(filename_buf);
   return 0;
 }

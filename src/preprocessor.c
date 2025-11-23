@@ -208,9 +208,8 @@ int expand_macro(const char* line, macro_t* head, FILE* dst_file, int lvl)
 
 FILE* preprocess_file(const char* path, const char* path_processed)
 {
-  //! Temporary comment (Will destroy file)
-//   if (access(path_processed, F_OK) == 0)
-//     throw_error("File \"%s\" exists", path_processed);
+  if (access(path_processed, F_OK) == 0)
+    throw_error("File \"%s\" exists", path_processed);
 
   FILE* src_file = fopen(path, "r");
   if (src_file == NULL)

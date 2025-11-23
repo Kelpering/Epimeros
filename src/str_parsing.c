@@ -214,30 +214,30 @@ int64_t parse_imm(char* str, parser_ctx* ctx)
     val = search_symtbl_strict(imm, ctx->symtbl)->byte_offset;
   free(imm);
 
-  //! There is a slight issue with these macros
-  //! Since addi sign-extends the final bit, we need to compensate
-  //! if %lo is > 0x800
-  //! So we use negative %lo and rounded %hi
-  
-  //! The question is, is it ok to do this for ALL %hi/%lo (even unpaired)?
-  //! They ARE meant to be used in pairs, and there is little utility in
-  //! only using one (unless under specific circumstances)
-  
-  //! And since %lo must be greater than a value, that makes it guaranteed
-  //! to be using both (otherwise the number would be off anyway)
-
   //! Extra assumption, since pcrel hi/lo are used in tandem
     //! And the PC will vary between the two lines
   //! Should we naturally account for that as well? (+4 to pc for pcrel_hi idk)
   if (strcmp("%hi", macro) == 0)
   {
     free(macro);
-    return val & 0xFFFFF000;
+    
+    // Since addi/lw/sw/etc. sign-extend the immediate, for labels and constants
+    // to be correctly loaded, we must add 2^11 to the upper 20 bits.
+    if (val & 0x800)
+      val = ((val & 0xFFFFF000) + 0x1000) >> 12;
+    else
+      val = (val & 0xFFFFF000) >> 12;
+    return val;
   }
   else if (strcmp("%lo", macro) == 0)
   {
     free(macro);
-    return val & 0x00000FFF;
+
+    // Return negative integers when necessary to fit range checking
+    val &= 0x00000FFF;
+    if (val & 0x800)
+      val |= 0xFFFFFFFFFFFFF000;
+    return val;
   }
   else if (strcmp("%pcrel_hi", macro) == 0)
   {
