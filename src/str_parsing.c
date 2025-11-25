@@ -168,7 +168,7 @@ uint32_t parse_reg(char* str, parser_ctx* ctx)
       reg = ctx->reg_def[i]->value;
   }
   if (reg == -1)
-    throw_error("Unknown register");
+    throw_error("Unknown register %s", str);
 
   return (uint32_t) reg;
 }

@@ -6,6 +6,7 @@
 #include "private/error.h"
 #include "private/parser.h"
 #include "instr_set/RV32I.h"
+#include "instr_set/RV64I.h"
 #include "private/translation.h"
 
 // #include "../old/include/"
@@ -25,6 +26,8 @@
     //^ Improve parsing
     //^ Create consistent parsing rules to remove confusion
   //^ Finish sysmacro translation
+  
+  //^ Improve line tracking in error.h
 
 int main(int argc, char** argv)
 {

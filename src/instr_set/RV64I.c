@@ -1,4 +1,4 @@
-#include "instr_set/RV32I.h"
+#include "instr_set/RV64I.h"
 #include "private/error.h"
 #include "private/parser.h"
 #include "private/str_parsing.h"
@@ -30,6 +30,19 @@ static uint32_t i_trans(instr_t* instr, parser_ctx* ctx)
 }
 
 static uint32_t shamt_trans(instr_t* instr, parser_ctx* ctx)
+{
+  uint32_t bytecode = instr->instr_def->opcode;
+  bytecode |= parse_reg(instr->op[0], ctx) << 7;
+  bytecode |= parse_reg(instr->op[1], ctx) << 15;
+
+  int64_t val = parse_imm(instr->op[2], ctx);
+  uint32_t shamt = process_bit_range(val, 6, false);
+  bytecode |= (shamt << 20);
+
+  return bytecode;
+}
+
+static uint32_t shamtw_trans(instr_t* instr, parser_ctx* ctx)
 {
   uint32_t bytecode = instr->instr_def->opcode;
   bytecode |= parse_reg(instr->op[0], ctx) << 7;
@@ -205,49 +218,65 @@ static uint32_t no_trans(instr_t* instr, parser_ctx* ctx)
 }
 
 static instr_def instr_array[] = 
-{               
-  {"lui",       0x00000037, 4, 2,     u_trans}, 
-  {"auipc",     0x00000017, 4, 2,     u_trans},
-  {"jal",       0x0000006F, 4, 2,     j_trans},
-  {"jalr",      0x00000067, 4, 3,     i_trans},
-  {"beq",       0x00000063, 4, 3,     b_trans},
-  {"bne",       0x00001063, 4, 3,     b_trans},
-  {"blt",       0x00004063, 4, 3,     b_trans},
-  {"bge",       0x00005063, 4, 3,     b_trans},
-  {"bltu",      0x00006063, 4, 3,     b_trans},
-  {"bgeu",      0x00007063, 4, 3,     b_trans},
-  {"lb",        0x00000003, 4, 3,     i_trans},
-  {"lh",        0x00001003, 4, 3,     i_trans},
-  {"lw",        0x00002003, 4, 3,     i_trans},
-  {"lbu",       0x00004003, 4, 3,     i_trans},
-  {"lhu",       0x00005003, 4, 3,     i_trans},
-  {"sb",        0x00000023, 4, 3,     s_trans},
-  {"sh",        0x00001023, 4, 3,     s_trans},
-  {"sw",        0x00002023, 4, 3,     s_trans},
-  {"addi",      0x00000013, 4, 3,     i_trans},
-  {"slti",      0x00002013, 4, 3,     i_trans},
-  {"sltiu",     0x00003013, 4, 3,     i_trans},
-  {"xori",      0x00004013, 4, 3,     i_trans},
-  {"ori",       0x00006013, 4, 3,     i_trans},
-  {"andi",      0x00007013, 4, 3,     i_trans},
-  {"slli",      0x00001013, 4, 3, shamt_trans},
-  {"srli",      0x00005013, 4, 3, shamt_trans},
-  {"srai",      0x40005013, 4, 3, shamt_trans},
-  {"add",       0x00000033, 4, 3,     r_trans},
-  {"sub",       0x40000033, 4, 3,     r_trans},
-  {"sll",       0x00001033, 4, 3,     r_trans},
-  {"slt",       0x00002033, 4, 3,     r_trans},
-  {"sltu",      0x00003033, 4, 3,     r_trans},
-  {"xor",       0x00004033, 4, 3,     r_trans},
-  {"srl",       0x00005033, 4, 3,     r_trans},
-  {"sra",       0x40005033, 4, 3,     r_trans},
-  {"or",        0x00006033, 4, 3,     r_trans},
-  {"and",       0x00007033, 4, 3,     r_trans},
-  {"fence",     0x0000000F, 4, 2, fence_trans}, 
-  {"fence.tso", 0x8330000F, 4, 0,    no_trans},
-  {"pause",     0x0100000F, 4, 0,    no_trans},
-  {"ecall",     0x00000073, 4, 0,    no_trans},
-  {"ebreak",    0x00100073, 4, 0,    no_trans},
+{
+  {"lui",       0x00000037, 4, 2,      u_trans}, 
+  {"auipc",     0x00000017, 4, 2,      u_trans},
+  {"jal",       0x0000006F, 4, 2,      j_trans},
+  {"jalr",      0x00000067, 4, 3,      i_trans},
+  {"beq",       0x00000063, 4, 3,      b_trans},
+  {"bne",       0x00001063, 4, 3,      b_trans},
+  {"blt",       0x00004063, 4, 3,      b_trans},
+  {"bge",       0x00005063, 4, 3,      b_trans},
+  {"bltu",      0x00006063, 4, 3,      b_trans},
+  {"bgeu",      0x00007063, 4, 3,      b_trans},
+  {"lb",        0x00000003, 4, 3,      i_trans},
+  {"lh",        0x00001003, 4, 3,      i_trans},
+  {"lw",        0x00002003, 4, 3,      i_trans},
+  {"lbu",       0x00004003, 4, 3,      i_trans},
+  {"lhu",       0x00005003, 4, 3,      i_trans},
+  {"sb",        0x00000023, 4, 3,      s_trans},
+  {"sh",        0x00001023, 4, 3,      s_trans},
+  {"sw",        0x00002023, 4, 3,      s_trans},
+  {"addi",      0x00000013, 4, 3,      i_trans},
+  {"slti",      0x00002013, 4, 3,      i_trans},
+  {"sltiu",     0x00003013, 4, 3,      i_trans},
+  {"xori",      0x00004013, 4, 3,      i_trans},
+  {"ori",       0x00006013, 4, 3,      i_trans},
+  {"andi",      0x00007013, 4, 3,      i_trans},
+  //! Overwritten in RV64I, analogous to sxxiw
+  // {"slli",      0x00001013, 4, 3, shamt_trans},
+  // {"srli",      0x00005013, 4, 3, shamt_trans},
+  // {"srai",      0x40005013, 4, 3, shamt_trans},
+  {"add",       0x00000033, 4, 3,      r_trans},
+  {"sub",       0x40000033, 4, 3,      r_trans},
+  {"sll",       0x00001033, 4, 3,      r_trans},
+  {"slt",       0x00002033, 4, 3,      r_trans},
+  {"sltu",      0x00003033, 4, 3,      r_trans},
+  {"xor",       0x00004033, 4, 3,      r_trans},
+  {"srl",       0x00005033, 4, 3,      r_trans},
+  {"sra",       0x40005033, 4, 3,      r_trans},
+  {"or",        0x00006033, 4, 3,      r_trans},
+  {"and",       0x00007033, 4, 3,      r_trans},
+  {"fence",     0x0000000F, 4, 2,  fence_trans}, 
+  {"fence.tso", 0x8330000F, 4, 0,     no_trans},
+  {"pause",     0x0100000F, 4, 0,     no_trans},
+  {"ecall",     0x00000073, 4, 0,     no_trans},
+  {"ebreak",    0x00100073, 4, 0,     no_trans},
+  {"lwu",       0x00006003, 4, 3,      i_trans},
+  {"ld",        0x00003003, 4, 3,      i_trans},
+  {"sd",        0x00003023, 4, 3,      s_trans},
+  {"slli",      0x00001013, 4, 3,  shamt_trans},
+  {"srli",      0x00005013, 4, 3,  shamt_trans},
+  {"srai",      0x40005013, 4, 3,  shamt_trans},
+  {"addiw",     0x0000001B, 4, 3,      i_trans},
+  {"slliw",     0x0000101B, 4, 3, shamtw_trans},
+  {"srliw",     0x0000501B, 4, 3, shamtw_trans},
+  {"sraiw",     0x4000501B, 4, 3, shamtw_trans},
+  {"addw",      0x0000003B, 4, 3,      r_trans},
+  {"subw",      0x4000003B, 4, 3,      r_trans},
+  {"sllw",      0x0000103B, 4, 3,      r_trans},
+  {"srlw",      0x0000503B, 4, 3,      r_trans},
+  {"sraw",      0x4000503B, 4, 3,      r_trans},
 };
 
 static reg_def reg_array[] = 
@@ -321,7 +350,7 @@ static reg_def reg_array[] =
   {"t6",  31},
 };
 
-instr_set RV32I = 
+instr_set RV64I = 
 {
   instr_array,
   sizeof(instr_array)/sizeof(instr_def),
