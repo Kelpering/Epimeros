@@ -1,229 +1,284 @@
-#include "parser.h"
+#include "private/parser.h"
+#include "private/str_parsing.h"
+#include "private/symtbl.h"
+#include "private/error.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "defines.h"
-#include "symtbl.h"
+#include <stdarg.h>
 
-static int line_num = 1;
-
-static void normalize_line(char* line)
+parser_ctx* init_parserctx(uint64_t start_addr, int set_count, ...)
 {
+  parser_ctx* ctx = malloc(sizeof(parser_ctx));
+  ctx->offset = start_addr;
+  ctx->symtbl = init_symtbl();
 
-    int line_size = 0;
-    while (line[line_size++] && line_size < MAX_LINE_SIZE);
+  va_list vargs;
+  va_start(vargs, set_count);
+  instr_set curr_set;
+  ctx->instr_count = 0;
+  ctx->reg_count = 0;
+  for (int i = 0; i < set_count; i++)
+  {
+    curr_set = va_arg(vargs, instr_set);
+    ctx->instr_count += curr_set.instr_def_size;
+    ctx->reg_count += curr_set.reg_def_size;
+  }
+  va_end(vargs);
 
-    if (line_size >= MAX_LINE_SIZE)
+  ctx->instr_def = malloc(sizeof(instr_def*) * ctx->instr_count);
+  ctx->reg_def = malloc(sizeof(reg_def*) * ctx->reg_count);
+
+  // Restart va_list
+  va_start(vargs, set_count);
+  int curr_instr = 0;
+  int curr_reg = 0;
+  
+  // This entire block is 3 simple loops (duplicated for reg_defs later)
+    // per set
+    // per defined instruction within a set
+    // per currently defined (parser_ctx) instruction
+  for (int set_i = 0; set_i < set_count; set_i++)
+  {
+    curr_set = va_arg(vargs, instr_set);
+    for (int def_j = 0; def_j < curr_set.instr_def_size; def_j++)
     {
-        printf("Error: Max line size exceeded. (Line: %d)\n", line_num);
-        exit(1);
-    }
-
-    // Add newline if absent
-    if (line[line_size-2] != '\n')
-    {
-        printf("Warn: Newline Absent (Line: %d)", line_num);
-        line[line_size-2] = '\n';
-    }
-
-    for (int i = 0; i < MAX_LINE_SIZE; i++)
-    {
-        if (line[i] == '\0')
-            break;
-
-        // Decapitalize
-        if (line[i] >= 'A' && line[i] <= 'Z')
+      // Prevent double definitons
+      for (int curr_k = 0; curr_k < curr_instr; curr_k++)
+      {
+        if (strcmp(ctx->instr_def[curr_k]->mnemonic, 
+                   curr_set.instr_def_array[def_j].mnemonic) == 0)
         {
-            line[i] += 32;
-            continue;
+          throw_error("Double instruction mnemonic definition \"%s\"", 
+                      ctx->instr_def[curr_k]->mnemonic);
         }
-
-        // Remove line comments
-        if (line[i] == '#')
-        {
-            // Line i+1 will not overflow due to previous check.
-            line[i] = '\n';
-            line[i+1] = '\0';
-            break;
-        }
+      }
+      ctx->instr_def[curr_instr++] = &curr_set.instr_def_array[def_j];
     }
+    for (int j = 0; j < curr_set.reg_def_size; j++)
+    {
+      // Prevent double definitons
+      for (int k = 0; k < curr_reg; k++)
+      {
+        if ((strcmp(ctx->reg_def[k]->reg_str, 
+                   curr_set.reg_def_array[j].reg_str) == 0) &&
+            ctx->reg_def[k]->value != curr_set.reg_def_array[j].value)
+        {
+          throw_error("Double instruction mnemonic definition \"%s\"", 
+                      ctx->reg_def[k]->reg_str);
+        }
+      }
+      ctx->reg_def[curr_reg++] = &curr_set.reg_def_array[j];
+    }
+  }
+  va_end(vargs);
 
-    return;
+  return ctx;
 }
 
-static bool skip_until(char* line, char c, int* pos)
+void free_parserctx(parser_ctx* ctx)
 {
-    while (line[*pos] != c && line[*pos] != '\n')
-        (*pos)++;
+  free(ctx->instr_def);
+  free(ctx->reg_def);
+  free_symtbl(ctx->symtbl);
+  free(ctx);
 
-    // Maybe return here for info on if we found char
-
-    return (line[*pos] == c);
+  return;
 }
 
-static mnemonic_index detect_mnemonic(char* line, int* const pos)
+instr_def* search_instr_defs(char* mnemonic, parser_ctx* ctx)
 {
-    // Skip past labels
-    for (int i = 0; i < MAX_LINE_SIZE; i++)
-    {
-        if (line[i] == '\n' || line[i] == '\0')
-            break;
+  for (int i = 0; i < ctx->instr_count; i++)
+  {
+    if (strcmp(mnemonic, ctx->instr_def[i]->mnemonic) == 0)
+      return ctx->instr_def[i];
+  }
 
-        if (line[i] == ':')
-            *pos = i+1;
+  throw_error("Unknown mnemonic \"%s\"", mnemonic);
+}
+
+instr_t* parse_line(char* line, parser_ctx* ctx)
+{
+  
+  // Validate letters
+  for (int i = 0; line[i]; i++)
+  {
+    char c = line[i];
+
+    // Alphabetic
+    if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z'))
+      continue;
+
+    // Numeric
+    if ('0' <= c && c <= '9')
+      continue;
+  
+    // Special
+    switch (c)
+    {
+      case ' ':
+      case '%':
+      case '(':
+      case ')':
+      case ',':
+      case '-':
+      case '.':
+      case ':':
+      case '_':
+        continue;
+
+      // End of Line
+      case '\0':
+      case '\n':
+      case '#':
+        line[i] = '\0';
+        break;
+
+      default:
+        throw_error("Invalid character \'%c\'", c);
+    }
+  }
+
+  int line_pos = 0;
+
+  // Skip pre-letter whitespace
+  if (skip_whitespace(line, &line_pos) == '\0')
+    return NULL;
+
+  // Check for label count
+  int label_count = 0;
+  for (int i = 0; line[i]; i++)
+  {
+    if (line[i] == ':')
+      label_count++;
+  }
+  if (label_count > 1)
+    throw_error("Too many labels on one line");
+
+  // Label processing
+  if (label_count)
+  {
+    char* label = extract_delim(':', line, &line_pos);
+    line_pos++;
+
+    // Validate label
+    for (int i = 0; label[i]; i++)
+    {
+      if (label[i] == ' ' && skip_whitespace(label, &i) != '\0')
+        throw_error("Split label");
+
+      switch (label[i]) 
+      {
+        // Forbid characters from label (we parsed line earlier for other chars)
+        case '(':
+        case ')':
+        case ',':
+          throw_error("Invalid char in label \'%c\'", label[i]);
+
+        default:
+          break;
+      }
     }
 
-    // Skip whitespace
-    while (line[*pos] == ' ')
-        (*pos)++;
+    // Case sensitive label
+    alloc_symbol(label, ctx->offset, ctx->symtbl);
+    free(label);
+  }
 
-    // End of Line, return.
-    if(line[*pos] == '\n' || line[*pos] == '\0')
-        return EOF;
+  // Skip pre-letter whitespace
+  if (skip_whitespace(line, &line_pos) == '\0')
+    return NULL;
 
-    int start_pos = *pos;
-    skip_until(line, ' ', pos);
+  // Mnemonic processing
+  char* mnemonic = extract_token(line, &line_pos);
+  for (int i = 0; mnemonic[i]; i++)
+  {
+    if ('A' <= mnemonic[i] && mnemonic[i] <= 'Z')
+      mnemonic[i] += 32;
+  }
 
-    char* mnemonic = malloc(*pos - start_pos + 1);
-    for (int i = 0; i < *pos - start_pos; i++)
-        mnemonic[i] = line[start_pos + i];
-    mnemonic[*pos - start_pos] = '\0';
 
-    (*pos)++;
 
-    for (int i = 0; i < TOTAL_MNEMONICS; i++)
+  instr_def* def = search_instr_defs(mnemonic, ctx);
+  ctx->offset += def->byte_width;
+  instr_t* instr = malloc(sizeof(instr_t) + sizeof(char*) * def->op_count);
+  instr->instr_def = def;
+  instr->next = NULL;
+  free(mnemonic);
+  
+
+  // Early return for no operands (skip parse_cb)
+  if (skip_whitespace(line, &line_pos) == '\0')
+  {
+    if (def->op_count == 0)
+     return instr;
+    else
+      throw_error("Expected operand");
+  }
+
+  if (def->op_count)
+  {
+    for (int i = 0; i < def->op_count - 1; i++)
     {
-        if (strcmp(mnemonic, instr_defs[i].str) == 0)
+      //! Doesnt check split tokens
+      //! Extract operand experiences errors with ), (Since both are termchar)
+      skip_whitespace(line, &line_pos);
+      instr->op[i] = extract_delim(',', line, &line_pos);
+      {
+        // emergency (portfolio) whitespace fixing (Was WIP fix)
+        int pos = strlen(instr->op[i]) - 1;
+        while (instr->op[i][pos] == ' ')
         {
-            free(mnemonic);
-            return i;
+          instr->op[i][pos] = '\0';
+          pos--;
         }
+      }
+      line_pos++;
     }
+    skip_whitespace(line, &line_pos);
+    instr->op[def->op_count-1] = extract_delim('\n', line, &line_pos);
+    {
+      // emergency (portfolio) whitespace fixing (Was WIP fix)
+      int pos = strlen(instr->op[def->op_count-1]) - 1;
+      while (instr->op[def->op_count-1][pos] == ' ')
+      {
+        instr->op[def->op_count-1][pos] = '\0';
+        pos--;
+      }
+    }
+  }
+  if (skip_whitespace(line, &line_pos) != '\0')
+    throw_error("Excess operand");
 
-    printf("Error: Unknown mnemonic \"%s\" (Line: %d)\n", mnemonic, line_num);
-
-    exit(1);
+  return instr;
 }
 
-op_t detect_reg(char* line, int* pos)
+instr_t* parse_file(FILE* file, parser_ctx* ctx)
 {
-    op_t op;
-    op.type = REGISTER;
+  line_num = 0;
+
+  char line_buf[100];
+  instr_t* head = NULL;
+  instr_t* prev = &(instr_t){NULL};
+  while (fgets(line_buf, sizeof(line_buf), file))
+  {
+    line_num++;
+
+    instr_t* curr = parse_line(line_buf, ctx);
+    if (!head)
+      head = curr;
     
-    // Skip whitespace
-    while (line[*pos] == ' ')
-        (*pos)++;
-
-    // End of Line, error.
-    if(line[*pos] == '\n' || line[*pos] == '\0')
+    // Skips empty lines/instructions
+    if (curr)
     {
-        printf("Error: Expected register (Line: %d)\n", line_num);
-        exit(1);
+      prev->next = curr;
+
+      // Allows parse_line to return more than one instruction
+      // Helpful for psuedo-instructions (like li)
+      while (prev->next)
+        prev = prev->next;
     }
+  }
 
-    int start_pos = *pos;
-    skip_until(line, ',', pos);
-    //! The skip here seems to work even for the last register. Test when finished.
-    
-    char* reg = malloc(*pos - start_pos + 1);
-    for (int i = 0; i < *pos - start_pos; i++)
-        reg[i] = line[start_pos + i];
-    reg[*pos - start_pos] = '\0';
-
-    (*pos)++;
-
-    // Identify register
-    for (int i = 0; i < TOTAL_REGS; i++)
-    {
-        if (strcmp(reg, reg_str_arr[i].str) == 0)
-        {
-            op.val = reg_str_arr[i].reg_index;
-            printf("Reg: %d\n", op.val);
-            free(reg);
-            return op;
-        }
-    }
-    printf("Error: Invalid register \"%s\" (Line: %d)\n", reg, line_num);
-    exit(1);
-}
-
-op_t detect_imm(char* line, int* pos)
-{
-    exit(1);
-}
-
-instr_t* parse_file(FILE* file, int instr_cnt)
-{
-    instr_t* tokens = malloc(instr_cnt * sizeof(instr_t));
-    
-    // Start from file beginning
-    rewind(file);
-
-    char line[MAX_LINE_SIZE+1];
-    int cur = 0;
-    while (fgets(line, MAX_LINE_SIZE, file))
-    {
-        int pos = 0;
-
-        normalize_line(line);
-
-        mnemonic_index mindex = detect_mnemonic(line, &pos);
-
-        if (mindex == EOF)
-            goto skip_instr;
-
-        tokens[cur].mnemonic = mindex;
-        tokens[cur].type = instr_defs[mindex].type;
-
-        switch (tokens[cur].type)
-        {
-            case R_TYPE:
-                tokens[cur].op[0] = detect_reg(line, &pos);
-                tokens[cur].op[1] = detect_reg(line, &pos);
-                tokens[cur].op[2] = detect_reg(line, &pos);
-                if (!skip_until(line, '\n', &pos))
-                {
-                    printf("Error: Too many operands (Line: %d)\n", line_num);
-                    exit(1);
-                }
-                break;
-            
-            case I_TYPE:
-            case S_TYPE:
-            case B_TYPE:
-                tokens[cur].op[0] = detect_reg(line, &pos);
-                tokens[cur].op[1] = detect_reg(line, &pos);
-                tokens[cur].op[2] = detect_imm(line, &pos);
-                if (!skip_until(line, '\n', &pos))
-                {
-                    printf("Error: Too many operands (Line: %d)\n", line_num);
-                    exit(1);
-                }
-                break;
-            
-            case U_TYPE:
-            case J_TYPE:
-                tokens[cur].op[0] = detect_reg(line, &pos);
-                tokens[cur].op[1] = detect_imm(line, &pos);
-                if (!skip_until(line, '\n', &pos))
-                {
-                    printf("Error: Too many operands (Line: %d)\n", line_num);
-                    exit(1);
-                }
-                break;
-            
-            case NO_TYPE:
-                printf("Error: Unhandled mnemonic \"%s\" (Line: %d)\n", instr_defs[mindex].str, line_num);
-                exit(1);
-            
-            
-        }
-
-        cur++;
-
-        skip_instr:
-        line_num++;
-    }
-
-
-    return tokens;
+  return head;
 }

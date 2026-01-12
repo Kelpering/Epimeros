@@ -1,26 +1,69 @@
+#include <limits.h>
 #include <stdio.h>
-#include "symtbl.h"
-#include "parser.h"
+#include <stdlib.h>
+#include <string.h>
+#include "private/preprocessor.h"
+#include "private/error.h"
+#include "private/parser.h"
+#include "instr_set/RV32I.h"
+#include "instr_set/RV64I.h"
+#include "private/translation.h"
 
-int main()
+//^ TODO
+  //^ Likely will rewrite macro handling to be nicer and more recursive
+  //^ Fix error line handling (currently barely functional and often incorrect)
+  //^ Likely rewrite a lot of parser/str_parsing to clean code and fix bugs
+    //^ Most of the string parsing is garbage that can be improved drastically
+  //^ Write documentation comments for all public functions (and select private)
+  //^ Add pseudo instructions like RV32I
+  //^ Add a few more directives (like .equ)
+    //^ .equ could be a symbol
+  //^ Rewrite majority of project to be more internally consistent and logical
+    //^ Return pointer instead of array index
+    //^ Use ctx more (esp symtbl)
+    //^ Improve naming
+    //^ Improve parsing
+    //^ Create consistent parsing rules to remove confusion
+  //^ Finish sysmacro translation
+  
+  //^ Improve line tracking in error.h
+
+int main(int argc, char** argv)
 {
-    printf("\n\n");
+  if (argc != 2)
+    throw_error("Incorrect number of arguments.\nExpected: 2; Provided: %d", 0, argc);
 
-    FILE* asm_file = fopen("test.asm", "r");
+  char* filename_buf = calloc(strlen(argv[1]) + 3, 1);
+  if (!filename_buf)
+    throw_error("OoM");
+  strcat(filename_buf, argv[1]);
+  strcat(filename_buf, ".S");
 
-    int instr_cnt = fill_symtbl(asm_file);
+  FILE* processed_file = preprocess_file(argv[1], filename_buf);
 
-    //- Print symbol table
-    int i = 0;
-    while (symtbl[i].type != NONE)
-    {
-        printf("%s (pc: %lu)\n", symtbl[i].name, symtbl[i].value);
-        i++;
-    }
+  parser_ctx* ctx = init_parserctx(0, 1, RV32I);
 
-    parse_file(asm_file, instr_cnt);
+  instr_t* instr_list = parse_file(processed_file, ctx);
 
+  //^ Just display each instruction as machine code; improve later.
+  temp_trans(instr_list, ctx);
 
-
-    return 0;
+  //^ Boilerplate free structure; improve later.
+  while(instr_list->next)
+  {
+    instr_t* temp = instr_list->next;
+    for (int i = 0; i < instr_list->instr_def->op_count; i++)
+      free(instr_list->op[i]);
+    free(instr_list);
+    instr_list = temp;
+  }
+  for (int i = 0; i < instr_list->instr_def->op_count; i++)
+    free(instr_list->op[i]);
+  free(instr_list);
+  free_parserctx(ctx);
+  
+  fclose(processed_file);
+  remove(filename_buf);
+  free(filename_buf);
+  return 0;
 }

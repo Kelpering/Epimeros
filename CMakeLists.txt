@@ -14,7 +14,6 @@ add_executable(Epimeros ${SOURCES})
 # Require C23 for binary constants
 set_property(TARGET Epimeros PROPERTY C_STANDARD 23)
 
-# Include only Epimeros headers (not internal libs) for external projects
 target_include_directories(Epimeros
     PRIVATE
         ${PROJECT_SOURCE_DIR}/include
@@ -25,6 +24,5 @@ target_compile_options(Epimeros
     PRIVATE
         -Wall
         -Wpedantic
-        -Werror
         -ggdb
 )

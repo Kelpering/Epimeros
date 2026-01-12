@@ -1,189 +1,107 @@
-#include "symtbl.h"
-#include <stdio.h>
+#include "private/symtbl.h"
+#include "private/error.h"
+#include <alloca.h>
 #include <stdlib.h>
 #include <string.h>
 
-static int line_num = 1;
-symbol symtbl[SYMTBL_SIZE] = {0};
+void expand_symtbl(uint32_t new_capacity, symtbl_t* symtbl);
 
-static void clear_symtbl()
+symtbl_t* init_symtbl()
 {
-    // Free name pointers
-    for (int i = 0; symtbl[i].type != NONE; i++)
-    {
-        free(symtbl[i].name);
-        symtbl[i] = (symbol) {NULL, 0, 0};
-    }
+  symtbl_t* symtbl = malloc(sizeof(symtbl_t));
+  if(!symtbl)
+    throw_error("Out of Memory");
 
-    return;    
+  symtbl->sym = NULL;
+  symtbl->size = 0;
+  symtbl->capacity = 0;
+  expand_symtbl(16, symtbl);
+
+  return symtbl;
 }
 
-static void store_label(int pc, char* label)
+void free_symtbl(symtbl_t* symtbl)
 {
-    int i;
-    for (i = 0; symtbl[i].type != NONE; i++)
-    {
-        if (strcmp(symtbl[i].name, label) == 0)
-        {
-            printf("Error: Duplicate label \"%s\". (Line: %d)\n", label, line_num);
-            exit(1);
-        }
-    }
-    symtbl[i] = (symbol) {label, pc, LABEL};
+  for (int i = 0; i < symtbl->capacity; i++)
+    free(symtbl->sym[i].symbol);
+  free(symtbl->sym);
+  free(symtbl);
 
-    return;
+  return;
 }
 
-static void normalize_line(char* line)
+void expand_symtbl(uint32_t new_capacity, symtbl_t* symtbl)
 {
+  if (symtbl->capacity >= new_capacity)
+    throw_error("Cannot shrink SymTbl capacity");
 
-    int line_size = 0;
-    while (line[line_size++] && line_size < MAX_LINE_SIZE);
+  symtbl->capacity = new_capacity;
+  symbol_t* new = malloc(sizeof(symbol_t) * (symtbl->capacity));
+  if(!new)
+    throw_error("Out of Memory");
 
-    if (line_size >= MAX_LINE_SIZE)
-    {
-        printf("Error: Max line size exceeded. (Line: %d)\n", line_num);
-        exit(1);
-    }
+  int i;
+  for (i = 0; i < symtbl->size; i++)
+    new[i] = symtbl->sym[i];
+  for (; i < symtbl->capacity; i++)
+  {
+    new[i].symbol = NULL;
+    new[i].type = SYM_EMPTY;
+    new[i].byte_offset = 0;
+  }
 
-    // Add newline if absent
-    if (line[line_size-2] != '\n')
-    {
-        printf("Warn: Newline Absent (Line: %d)\n", line_num);
-        line[line_size-2] = '\n';
-    }
+  free(symtbl->sym);
+  symtbl->sym = new;
 
-    for (int i = 0; i < MAX_LINE_SIZE; i++)
-    {
-        if (line[i] == '\0')
-            break;
-
-        // Decapitalize
-        if (line[i] >= 'A' && line[i] <= 'Z')
-        {
-            line[i] += 32;
-            continue;
-        }
-
-        // Remove line comments
-        if (line[i] == '#')
-        {
-            // Line i+1 will not overflow due to previous check.
-            line[i] = '\n';
-            line[i+1] = '\0';
-            break;
-        }
-    }
-
-    return;
+  return;
 }
 
-static bool valid_char(char c)
+symbol_t* alloc_symbol(const char* symbol, uint64_t val, symtbl_t* symtbl)
 {
-    if (c >= 'A' && c <= 'Z')
-        return true;
+  symbol_t* sym = search_symtbl(symbol, symtbl);
+  if (sym->type == SYM_ALLOCATED)
+    throw_error("Double symbol \"%s\"", sym->symbol);
 
-    if (c >= 'a' && c <= 'z')
-        return true;
+  // char* symbol already set by search_symtbl
+  sym->type = SYM_ALLOCATED;
+  sym->byte_offset = val;
 
-    if (c >= '0' && c <= '9')
-        return true;
+  // Never allow symtbl to become full
+  symtbl->size++;
+  if (symtbl->capacity <= symtbl->size)
+    expand_symtbl(symtbl->capacity * 2, symtbl);
 
-    if (c == '_')
-        return true;
-
-    return false;
+  return sym;
 }
 
-static bool skip_until(char* line, char c, int* pos)
+symbol_t* search_symtbl(const char* symbol, symtbl_t* symtbl)
 {
-    while (line[*pos] != c && line[*pos] != '\n')
-        (*pos)++;
+  // Never fails since symtbl is always over-allocated.
+  uint32_t sym_index;
+  for (sym_index = 0; symtbl->sym[sym_index].type != SYM_EMPTY; sym_index++)
+  {
+    if (strcmp(symbol, symtbl->sym[sym_index].symbol) == 0)
+      return &symtbl->sym[sym_index];
+  }
 
-    return (line[*pos] == c);
+  //? Expect a forward reference (future-defined) symbol.
+  symbol_t* sym = &symtbl->sym[sym_index];
+  sym->symbol = strdup(symbol);
+  sym->type = SYM_EXPECTED;
+  sym->byte_offset = 0;   // Value must later be resolved before translation
+
+  // Never allow symtbl to become full
+  symtbl->size++;
+  if (symtbl->capacity <= symtbl->size)
+    expand_symtbl(symtbl->capacity * 2, symtbl);
+
+  return sym;
 }
 
-static bool detect_label(char* line, int* pos, int* pc, char** symbol)
+symbol_t* search_symtbl_strict(const char* symbol, symtbl_t* symtbl)
 {
-    while (line[*pos] == ' ')
-        (*pos)++;
-
-    char c = line[*pos];
-
-    if (c == '\n')
-        return false;
-
-    // Directive
-    if (c == '.')
-    {
-        //^ Handle directive action
-        printf("TODO: Handle Directives in symtbl.c (Line %d)\n", line_num);
-        exit(1);
-    }
-
-    if (!valid_char(c))
-    {
-        printf("Error: Unrecognized char \'%c\' (Line: %d)\n", c, line_num);
-        exit(1);
-    }
-
-    int start_pos = *pos;
-    if (!skip_until(line, ':', pos))
-    {
-        // Assume a 4 byte instruction if no label.
-        // Empty lines are filtered out earlier
-        //! This assumption is likely false, fact check later.
-        (*pc) += 4;
-
-
-        return false;
-    }
-    
-    (*symbol) = malloc(*pos - start_pos + 1);
-    
-    for (int i = 0; i < *pos - start_pos; i++)
-        (*symbol)[i] = line[start_pos + i];
-    (*symbol)[*pos - start_pos] = '\0';
-    (*pos)++;
-
-    int i = 0; do 
-    {
-        if (valid_char((*symbol)[i]))
-            continue;
-
-        printf("Error: Unrecognized char \'%c\' in label \"%s\" (Line: %d)\n", (*symbol)[i], *symbol, line_num);
-        exit(1);
-    } while ((*symbol)[++i]);
-
-    return true;
-}
-
-int fill_symtbl(FILE* file)
-{
-    // Clear symtbl if needed
-    if (symtbl[0].type != NONE)
-        clear_symtbl();
-
-    
-    // Start from file beginning
-    rewind(file);
-
-    char line[MAX_LINE_SIZE+1];
-    int pc = 0;
-    while (fgets(line, MAX_LINE_SIZE, file))
-    {
-        char* symbol = NULL;
-        int pos = 0;
-        
-        normalize_line(line);
-        
-        while (detect_label(line, &pos, &pc, &symbol))
-            store_label(pc, symbol);
-        
-        
-        line_num++;
-    }
-    
-
-    return pc / 4;
+  symbol_t* sym = search_symtbl(symbol, symtbl);
+  if (sym->type != SYM_ALLOCATED)
+    throw_error("Missing symbol");
+  return sym;
 }
