@@ -9,16 +9,15 @@
 #include "instr_set/RV64I.h"
 #include "private/translation.h"
 
-// #include "../old/include/"
-
 //^ TODO
   //^ Likely will rewrite macro handling to be nicer and more recursive
+  //^ Fix error line handling (currently barely functional and often incorrect)
   //^ Likely rewrite a lot of parser/str_parsing to clean code and fix bugs
     //^ Most of the string parsing is garbage that can be improved drastically
   //^ Write documentation comments for all public functions (and select private)
   //^ Add pseudo instructions like RV32I
   //^ Add a few more directives (like .equ)
-    //^ .equ could totally be a symbol
+    //^ .equ could be a symbol
   //^ Rewrite majority of project to be more internally consistent and logical
     //^ Return pointer instead of array index
     //^ Use ctx more (esp symtbl)
@@ -45,9 +44,11 @@ int main(int argc, char** argv)
   parser_ctx* ctx = init_parserctx(0, 1, RV32I);
 
   instr_t* instr_list = parse_file(processed_file, ctx);
+
+  //^ Just display each instruction as machine code; improve later.
   temp_trans(instr_list, ctx);
 
-  // Boilerplate free structure
+  //^ Boilerplate free structure; improve later.
   while(instr_list->next)
   {
     instr_t* temp = instr_list->next;

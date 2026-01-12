@@ -208,6 +208,7 @@ int expand_macro(const char* line, macro_t* head, FILE* dst_file, int lvl)
 
 FILE* preprocess_file(const char* path, const char* path_processed)
 {
+  //! Allow deletion of file by commenting
   // if (access(path_processed, F_OK) == 0)
   //   throw_error("File \"%s\" exists", path_processed);
 

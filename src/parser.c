@@ -197,6 +197,8 @@ instr_t* parse_line(char* line, parser_ctx* ctx)
       mnemonic[i] += 32;
   }
 
+
+
   instr_def* def = search_instr_defs(mnemonic, ctx);
   ctx->offset += def->byte_width;
   instr_t* instr = malloc(sizeof(instr_t) + sizeof(char*) * def->op_count);
@@ -222,10 +224,28 @@ instr_t* parse_line(char* line, parser_ctx* ctx)
       //! Extract operand experiences errors with ), (Since both are termchar)
       skip_whitespace(line, &line_pos);
       instr->op[i] = extract_delim(',', line, &line_pos);
+      {
+        // emergency (portfolio) whitespace fixing (Was WIP fix)
+        int pos = strlen(instr->op[i]) - 1;
+        while (instr->op[i][pos] == ' ')
+        {
+          instr->op[i][pos] = '\0';
+          pos--;
+        }
+      }
       line_pos++;
     }
     skip_whitespace(line, &line_pos);
     instr->op[def->op_count-1] = extract_delim('\n', line, &line_pos);
+    {
+      // emergency (portfolio) whitespace fixing (Was WIP fix)
+      int pos = strlen(instr->op[def->op_count-1]) - 1;
+      while (instr->op[def->op_count-1][pos] == ' ')
+      {
+        instr->op[def->op_count-1][pos] = '\0';
+        pos--;
+      }
+    }
   }
   if (skip_whitespace(line, &line_pos) != '\0')
     throw_error("Excess operand");
